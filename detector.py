@@ -5,6 +5,7 @@ from typing import Dict, List
 
 import joblib
 import numpy as np
+import pandas as pd
 
 MODEL_DIR = Path(".")
 DEFAULT_UNSUPERVISED_WEIGHTS = {
@@ -103,6 +104,17 @@ def _ordered_vector(feature_dict: Dict[str, float]) -> np.ndarray:
     return np.array(list(feature_dict.values()), dtype=float)
 
 
+def _model_input_frame(feature_dict: Dict[str, float]) -> pd.DataFrame:
+    if FEATURE_COLUMNS:
+        values = {col: float(feature_dict.get(col, 0.0)) for col in FEATURE_COLUMNS}
+        return pd.DataFrame([values], columns=FEATURE_COLUMNS)
+
+    ordered_items = list(feature_dict.items())
+    if not ordered_items:
+        return pd.DataFrame([[0.0]])
+    return pd.DataFrame([[float(v) for _, v in ordered_items]], columns=[k for k, _ in ordered_items])
+
+
 def _decode_label(pred_value) -> str:
     if LABEL_ENCODER is not None:
         try:
@@ -131,8 +143,7 @@ def _weighted_risk(flags: Dict[str, bool]) -> float:
 
 
 def _supervised_detect(feature_dict: Dict[str, float]):
-    vector = _ordered_vector(feature_dict)
-    X = vector.reshape(1, -1)
+    X = _model_input_frame(feature_dict)
 
     pred_value = SUPERVISED_MODEL.predict(X)[0]
     predicted_label = _decode_label(pred_value)
@@ -199,8 +210,7 @@ def _unsupervised_detect(feature_dict: Dict[str, float], client_id=None):
             "(scaler.pkl, isolation_forest.pkl, one_class_svm.pkl)."
         )
 
-    vector = _ordered_vector(feature_dict)
-    X = vector.reshape(1, -1)
+    X = _model_input_frame(feature_dict)
     X_scaled = scaler.transform(X)
 
     if_score = float(isolation_forest.decision_function(X_scaled)[0])
