@@ -158,3 +158,31 @@ CIC flow CSV:
 ```bash
 python dataset_adapters.py cic-flow --input CIC-DDoS2019.csv --output request_logs.csv
 ```
+
+FIU/MSRC revised tar traces:
+```bash
+python dataset_adapters.py revised-tar \
+  --input FIU-trace.tar \
+  --output request_logs.csv \
+  --max-events-per-file 20000 \
+  --max-files 0 \
+  --max-events 0
+```
+
+Fast multi-client sample (recommended while iterating):
+```bash
+python dataset_adapters.py revised-tar \
+  --input FIU-trace.tar \
+  --output request_logs.csv \
+  --max-files 40 \
+  --max-events-per-file 15000
+```
+
+Build features directly from generated request logs:
+```bash
+python build_feature_dataset_from_logs.py \
+  --input request_logs.csv \
+  --feature-output feature_dataset.csv \
+  --detection-output detection_results.csv \
+  --min-events 50
+```

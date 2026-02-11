@@ -28,12 +28,18 @@ uploads/
 telemetry.db
 telemetry.db-shm
 telemetry.db-wal
+local_chunks/
 
 # Local datasets and generated artifacts
 request_logs.csv
+request_logs_*.csv
 detection_results.csv
 feature_dataset.csv
 training_data.csv
+*.tar
+*.tar.gz
+*.tgz
+*.rar
 model_metadata.json
 training_metrics.json
 scaler.pkl
