@@ -257,7 +257,7 @@ def supervised_candidates(random_state: int) -> Dict[str, Tuple[Pipeline, Dict[s
                         RandomForestClassifier(
                             random_state=random_state,
                             class_weight="balanced_subsample",
-                            n_jobs=-1,
+                            n_jobs=1,
                         ),
                     ),
                 ]
@@ -334,7 +334,7 @@ def train_supervised(
             param_grid=param_grid,
             scoring=args.scoring,
             cv=cv,
-            n_jobs=-1,
+            n_jobs=1,
             refit=True,
         )
         search.fit(X_train, y_train)
@@ -495,8 +495,10 @@ def main() -> None:
 
     label_counts = None
     binary_collapse_applied = False
+    has_normal_label = False
     if y_raw is not None:
         label_counts = y_raw.astype(str).value_counts()
+        has_normal_label = "normal" in set(y_raw.astype(str).unique())
 
     if (
         (not args.force_unsupervised)
@@ -522,6 +524,7 @@ def main() -> None:
         and (label_counts is not None)
         and (label_counts.size >= 2)
         and (int(label_counts.min()) >= 2)
+        and has_normal_label
     )
 
     if use_supervised:
@@ -542,6 +545,8 @@ def main() -> None:
     else:
         if y_raw is None:
             print("Training mode: unsupervised (no label column found)")
+        elif not has_normal_label:
+            print("Training mode: unsupervised (no 'normal' label found)")
         elif label_counts is not None and label_counts.size < 2:
             print("Training mode: unsupervised (labels have <2 classes)")
         elif label_counts is not None and int(label_counts.min()) < 2:
@@ -558,6 +563,12 @@ def main() -> None:
             model_dir=model_dir,
             args=args,
         )
+
+        # Prevent stale supervised files from shadowing unsupervised artifacts at runtime.
+        for stale_file in ("attack_classifier.pkl", "attack_label_encoder.pkl", "training_metrics.json"):
+            stale_path = model_dir / stale_file
+            if stale_path.exists():
+                stale_path.unlink()
 
     with open(model_dir / "model_metadata.json", "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2)
