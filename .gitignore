@@ -1,0 +1,47 @@
+# Python cache / build
+__pycache__/
+*.py[cod]
+*.so
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Test / lint / coverage caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# IDE / OS files
+.DS_Store
+.vscode/
+.idea/
+
+# Local runtime outputs
+uploads/
+*.log
+telemetry.db
+telemetry.db-shm
+telemetry.db-wal
+
+# Local datasets and generated artifacts
+request_logs.csv
+detection_results.csv
+feature_dataset.csv
+training_data.csv
+model_metadata.json
+training_metrics.json
+scaler.pkl
+isolation_forest.pkl
+one_class_svm.pkl
+attack_classifier.pkl
+attack_label_encoder.pkl
+dense_autoencoder.keras
+dense_ae_threshold.npy
+lstm_autoencoder.keras
+lstm_threshold.npy

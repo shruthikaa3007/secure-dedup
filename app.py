@@ -1,146 +1,324 @@
-from fastapi import FastAPI, UploadFile, File
+import json
 import os
-import time
-from feature_store import save_features
-from detector import detect_anomaly
-from attack_labeler import label_attack
+from typing import Dict, Optional
 
+from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
+from pydantic import BaseModel, Field
+
+from attack_labeler import label_attack
+from auth import resolve_client_id, validate_api_key
 from chunking import chunk_file
-from hashing import hash_chunk
-from storage import upload_chunk, get_chunk
 from dedup_index import chunk_exists, register_chunk
-from pow import generate_challenge, compute_proof, verify_proof
-from logger import log_request, REQUEST_LOGS
+from detector import detect_anomaly
+from feature_store import save_features
 from features import extract_features
+from hashing import hash_chunk
+from logger import REQUEST_LOGS, log_request
+from policy_engine import (
+    decide_response,
+    get_active_policy_action,
+    register_policy_action,
+)
+from pow_session import consume_verified, get_or_create_challenge, verify_challenge
+from storage import get_chunk, upload_chunk
 
 app = FastAPI()
 
-# Directory to store raw uploaded files (debugging / inspection)
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
-@app.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
-    attack_label = "normal"
-    
-    # 🔑 1️⃣ Create client_id INSIDE request
-    client_id = "client_" + str(abs(hash(file.filename)) % 1000)
+class PowChallengeRequest(BaseModel):
+    chunk_hash: str = Field(min_length=16)
 
-    # ⏱️ Log upload request start
+
+class PowVerifyRequest(BaseModel):
+    challenge_id: str = Field(min_length=8)
+    chunk_hash: str = Field(min_length=16)
+    proof: str = Field(min_length=16)
+
+
+def _safe_detect(features: Dict, client_id: str) -> Dict:
+    try:
+        return detect_anomaly(features, client_id=client_id)
+    except Exception as exc:
+        return {
+            "model_scores": {},
+            "is_anomaly": False,
+            "risk_score": 0.0,
+            "anomaly_votes": 0,
+            "models_considered": 0,
+            "lstm_is_anomaly": False,
+            "lstm_error": None,
+            "predicted_attack_label": "normal",
+            "class_probabilities": {},
+            "detection_mode": "unavailable",
+            "detection_error": str(exc),
+        }
+
+
+def _raise_policy_exception(client_id: str, policy: Dict, detection: Optional[Dict] = None) -> None:
+    detail = {
+        "error": "Request blocked by anomaly policy" if policy["action"] == "BLOCK" else "Rate limited by anomaly policy",
+        "client_id": client_id,
+        "policy": policy,
+    }
+    if detection is not None:
+        detail["detection"] = detection
+    raise HTTPException(status_code=policy["status_code"], detail=detail)
+
+
+def _enforce_pre_request_policy(client_id: str) -> None:
+    active_policy = get_active_policy_action(client_id)
+    if active_policy and active_policy.get("action") in {"RATE_LIMIT", "BLOCK"}:
+        policy = {
+            "action": active_policy["action"],
+            "status_code": 429 if active_policy["action"] == "RATE_LIMIT" else 403,
+            "remaining_sec": active_policy.get("remaining_sec", 0),
+        }
+        _raise_policy_exception(client_id, policy)
+
+    history = REQUEST_LOGS.get(client_id)
+    if not history or len(history) < 8:
+        return
+
+    history_features = extract_features(history, REQUEST_LOGS)
+    history_result = _safe_detect(history_features, client_id=client_id)
+    history_policy = decide_response(history_result)
+
+    if history_policy["action"] in {"RATE_LIMIT", "BLOCK"}:
+        register_policy_action(client_id, history_policy["action"])
+        _raise_policy_exception(client_id, history_policy, history_result)
+
+
+def _parse_pow_proofs(raw: Optional[str]) -> Dict[str, Dict[str, str]]:
+    if not raw:
+        return {}
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail={"error": f"Invalid pow_proofs_json: {exc}"})
+
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail={"error": "pow_proofs_json must be an object"})
+
+    parsed: Dict[str, Dict[str, str]] = {}
+    for chunk_hash, payload in data.items():
+        if not isinstance(payload, dict):
+            continue
+        challenge_id = payload.get("challenge_id")
+        proof = payload.get("proof")
+        if isinstance(challenge_id, str) and isinstance(proof, str):
+            parsed[str(chunk_hash)] = {
+                "challenge_id": challenge_id,
+                "proof": proof,
+            }
+
+    return parsed
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+@app.post("/pow/challenge")
+def create_pow_challenge(
+    request: PowChallengeRequest,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
+):
+    api_key = validate_api_key(x_api_key)
+    client_id = resolve_client_id(x_client_id, request.chunk_hash, api_key)
+
+    if not chunk_exists(request.chunk_hash):
+        raise HTTPException(status_code=404, detail={"error": "Chunk not found", "chunk_hash": request.chunk_hash})
+
+    stored_chunk = get_chunk(request.chunk_hash)
+    challenge = get_or_create_challenge(client_id, request.chunk_hash, len(stored_chunk))
+
+    return {
+        "status": "challenge_created",
+        "client_id": client_id,
+        "chunk_hash": request.chunk_hash,
+        "challenge": {
+            "challenge_id": challenge["challenge_id"],
+            "nonce_hex": challenge["nonce_hex"],
+            "offset": challenge["offset"],
+            "length": challenge["length"],
+            "expires_at": challenge["expires_at"],
+        },
+    }
+
+
+@app.post("/pow/verify")
+def verify_pow(
+    request: PowVerifyRequest,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
+):
+    api_key = validate_api_key(x_api_key)
+    client_id = resolve_client_id(x_client_id, request.chunk_hash, api_key)
+
+    if not chunk_exists(request.chunk_hash):
+        raise HTTPException(status_code=404, detail={"error": "Chunk not found", "chunk_hash": request.chunk_hash})
+
+    stored_chunk = get_chunk(request.chunk_hash)
+    verified = verify_challenge(
+        client_id=client_id,
+        challenge_id=request.challenge_id,
+        chunk_hash=request.chunk_hash,
+        stored_chunk=stored_chunk,
+        client_proof=request.proof,
+    )
+
+    if not verified:
+        raise HTTPException(status_code=403, detail={"error": "PoW verification failed"})
+
+    return {
+        "status": "verified",
+        "client_id": client_id,
+        "chunk_hash": request.chunk_hash,
+    }
+
+
+@app.post("/upload")
+async def upload_file(
+    file: UploadFile = File(...),
+    pow_proofs_json: Optional[str] = Form(default=None),
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
+):
+    api_key = validate_api_key(x_api_key)
+    client_id = resolve_client_id(x_client_id, file.filename, api_key)
+    _enforce_pre_request_policy(client_id)
+
     log_request(
         client_id=client_id,
         operation_type="upload_start",
         chunk_hash=None,
-        pow_result=None
+        pow_result=None,
     )
 
-    # 📥 2️⃣ Read file ONCE
     data = await file.read()
-
     if not data:
-        return {"error": "Empty file uploaded"}
+        raise HTTPException(status_code=400, detail={"error": "Empty file uploaded"})
 
-    # Save raw upload (debug)
     safe_name = file.filename or "uploaded.bin"
     save_path = os.path.join(UPLOAD_DIR, safe_name)
-
     with open(save_path, "wb") as f:
         f.write(data)
 
-    # 🧱 3️⃣ Chunk the file
     chunks = chunk_file(data)
-    recipe = []
+    if not chunks:
+        raise HTTPException(status_code=400, detail={"error": "Unable to split uploaded data into chunks"})
 
-    for chunk in chunks:
-        if not chunk:
+    chunk_records = [(chunk, hash_chunk(chunk)) for chunk in chunks if chunk]
+    recipe = [chunk_hash for _, chunk_hash in chunk_records]
+
+    supplied_proofs = _parse_pow_proofs(pow_proofs_json)
+    verified_duplicate_hashes = set()
+    pending_challenges_by_hash: Dict[str, Dict] = {}
+
+    # Phase 1: ensure duplicate chunks have valid PoW before mutating storage/index.
+    for chunk, chunk_hash in chunk_records:
+        if not chunk_exists(chunk_hash):
             continue
 
-        chunk_hash = hash_chunk(chunk)
-        recipe.append(chunk_hash)
+        proof_payload = supplied_proofs.get(chunk_hash)
+        is_verified = False
+        if proof_payload:
+            stored_chunk = get_chunk(chunk_hash)
+            is_verified = verify_challenge(
+                client_id=client_id,
+                challenge_id=proof_payload["challenge_id"],
+                chunk_hash=chunk_hash,
+                stored_chunk=stored_chunk,
+                client_proof=proof_payload["proof"],
+            )
 
-        # 🔍 Log hash query
+        if not is_verified:
+            is_verified = consume_verified(client_id, chunk_hash)
+
+        if is_verified:
+            verified_duplicate_hashes.add(chunk_hash)
+            continue
+
+        challenge = get_or_create_challenge(client_id, chunk_hash, len(chunk))
+        pending_challenges_by_hash[chunk_hash] = {
+            "chunk_hash": chunk_hash,
+            "challenge_id": challenge["challenge_id"],
+            "nonce_hex": challenge["nonce_hex"],
+            "offset": challenge["offset"],
+            "length": challenge["length"],
+            "expires_at": challenge["expires_at"],
+        }
+
+    if pending_challenges_by_hash:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "PoW verification required for duplicate chunks",
+                "client_id": client_id,
+                "required_challenges": list(pending_challenges_by_hash.values()),
+                "hint": "Call /pow/verify or provide pow_proofs_json and retry /upload",
+            },
+        )
+
+    # Phase 2: perform dedup processing.
+    for chunk, chunk_hash in chunk_records:
         log_request(
             client_id=client_id,
             operation_type="hash_query",
             chunk_hash=chunk_hash,
-            pow_result=None
+            pow_result=None,
         )
 
-        # 🆕 New chunk
         if not chunk_exists(chunk_hash):
             upload_chunk(chunk_hash, chunk)
             register_chunk(chunk_hash)
-
             log_request(
                 client_id=client_id,
                 operation_type="upload_chunk",
                 chunk_hash=chunk_hash,
-                pow_result="N/A"
+                pow_result="N/A",
             )
-
-        # ♻️ Duplicate chunk → Proof of Ownership
         else:
-            challenge = generate_challenge()
+            if chunk_hash not in verified_duplicate_hashes:
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "error": "Missing verified PoW for duplicate chunk",
+                        "chunk_hash": chunk_hash,
+                    },
+                )
 
-            client_proof = compute_proof(
-                chunk,
-                challenge["nonce"],
-                challenge["offset"],
-                challenge["length"]
-            )
-
-            stored_chunk = get_chunk(chunk_hash)
-
-            verified = verify_proof(
-                stored_chunk,
-                challenge["nonce"],
-                challenge["offset"],
-                challenge["length"],
-                client_proof
-            )
-
+            register_chunk(chunk_hash)
             log_request(
                 client_id=client_id,
                 operation_type="pow",
                 chunk_hash=chunk_hash,
-                pow_result=verified
+                pow_result=True,
             )
 
-            if not verified:
-                return {
-                    "error": "Proof of Ownership failed",
-                    "chunk_hash": chunk_hash
-                }
+    client_features = extract_features(REQUEST_LOGS[client_id], REQUEST_LOGS)
+    result = _safe_detect(client_features, client_id=client_id)
+    policy = decide_response(result)
 
-            register_chunk(chunk_hash)
+    if policy["action"] in {"RATE_LIMIT", "BLOCK"}:
+        register_policy_action(client_id, policy["action"])
 
-    # 📊 4️⃣ Feature extraction (Module 2 output)
-    client_features = extract_features(
-        REQUEST_LOGS[client_id],
-        REQUEST_LOGS
-    )
-    result = detect_anomaly(client_features, client_id=client_id)
+    attack_label = label_attack(client_features)
 
-    if result["is_anomaly"]:
-        print(f"🚨 ALERT: Anomalous behavior detected from {client_id}")
-        print(result)
-        
     save_features(
         client_id,
         client_features,
         anomaly=result["is_anomaly"],
-        label=attack_label
+        label=attack_label,
+        risk_score=result.get("risk_score"),
+        policy_action=policy["action"],
     )
-
-
-    print(f"[DEBUG] Features saved for {client_id}")
-
-    attack_label = label_attack(client_features)
-
-    if attack_label != "normal":
-        print(f"⚠️ Simulated attack detected: {attack_label}")
-
 
     return {
         "status": "Upload successful",
@@ -149,5 +327,7 @@ async def upload_file(file: UploadFile = File(...)):
         "file_recipe": recipe,
         "features": client_features,
         "saved_to": save_path,
-        "anomaly_result": result
+        "anomaly_result": result,
+        "policy_decision": policy,
+        "attack_label": attack_label,
     }

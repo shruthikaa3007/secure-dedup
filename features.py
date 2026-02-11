@@ -17,12 +17,12 @@ def extract_features(client_logs, all_logs):
         if e["operation_type"] == "pow"
     ]
 
-    # ✅ FIXED cross-user hash overlap
+    # Compare against hashes seen in other clients only.
     other_hashes = set(
         e["chunk_hash"]
-        for cid, logs in all_logs.items()
+        for logs in all_logs.values()
         for e in logs
-        if cid != client_logs and e.get("chunk_hash")
+        if logs is not client_logs and e.get("chunk_hash")
     )
 
     timestamps = [e["timestamp"] for e in client_logs]

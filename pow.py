@@ -3,11 +3,17 @@ import os
 import random
 import hashlib
 
-def generate_challenge():
+
+def generate_challenge(chunk_length: int):
+    if chunk_length <= 0:
+        raise ValueError("chunk_length must be positive")
+
+    proof_length = min(32, chunk_length)
+    max_offset = max(0, chunk_length - proof_length)
     return {
         "nonce": os.urandom(16),
-        "offset": random.randint(0, 128),
-        "length": 32
+        "offset": random.randint(0, max_offset),
+        "length": proof_length
     }
 
 
