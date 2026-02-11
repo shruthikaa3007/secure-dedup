@@ -120,7 +120,7 @@ async def upload_file(file: UploadFile = File(...)):
         REQUEST_LOGS[client_id],
         REQUEST_LOGS
     )
-    result = detect_anomaly(client_features)
+    result = detect_anomaly(client_features, client_id=client_id)
 
     if result["is_anomaly"]:
         print(f"🚨 ALERT: Anomalous behavior detected from {client_id}")
@@ -148,5 +148,6 @@ async def upload_file(file: UploadFile = File(...)):
         "total_chunks": len(recipe),
         "file_recipe": recipe,
         "features": client_features,
-        "saved_to": save_path
+        "saved_to": save_path,
+        "anomaly_result": result
     }

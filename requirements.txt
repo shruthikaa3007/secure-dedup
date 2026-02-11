@@ -5,3 +5,7 @@ redis
 minio
 fastcdc
 pyfastcdc
+pandas
+numpy
+scikit-learn
+joblib
