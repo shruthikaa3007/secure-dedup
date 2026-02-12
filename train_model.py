@@ -15,6 +15,8 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.svm import OneClassSVM
 from sklearn.linear_model import LogisticRegression
 
+from evaluate_model import evaluate_and_write_reports
+
 UNSUPERVISED_WEIGHTS = {
     "isolation_forest": 0.25,
     "one_class_svm": 0.20,
@@ -116,6 +118,21 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=42,
         help="Random seed (default: 42)",
+    )
+    parser.add_argument(
+        "--skip-evaluation",
+        action="store_true",
+        help="Skip post-training evaluation report generation",
+    )
+    parser.add_argument(
+        "--evaluation-json",
+        default="evaluation_report.json",
+        help="Evaluation JSON filename/path (relative to model-dir by default)",
+    )
+    parser.add_argument(
+        "--evaluation-md",
+        default="evaluation_report.md",
+        help="Evaluation markdown filename/path (relative to model-dir by default)",
     )
     return parser.parse_args()
 
@@ -572,6 +589,35 @@ def main() -> None:
 
     with open(model_dir / "model_metadata.json", "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2)
+
+    if not args.skip_evaluation:
+        evaluation_json = Path(args.evaluation_json)
+        if not evaluation_json.is_absolute():
+            evaluation_json = model_dir / evaluation_json
+
+        evaluation_md = Path(args.evaluation_md)
+        if not evaluation_md.is_absolute():
+            evaluation_md = model_dir / evaluation_md
+
+        try:
+            evaluation_summary = evaluate_and_write_reports(
+                dataset_path=dataset_path,
+                model_dir=model_dir,
+                label_column=args.label_column,
+                output_json_path=evaluation_json,
+                output_md_path=evaluation_md,
+                unsupervised_threshold=args.unsupervised_threshold,
+            )
+            print(
+                "Evaluation report generated: "
+                f"mode={evaluation_summary.get('mode_evaluated')} "
+                f"rows={evaluation_summary.get('rows_evaluated')} "
+                f"json={evaluation_json} md={evaluation_md}"
+            )
+        except Exception as exc:
+            print(f"Warning: evaluation report generation failed: {exc}")
+    else:
+        print("Post-training evaluation skipped (--skip-evaluation)")
 
     print(f"Training complete. Saved artifacts in: {model_dir}")
 

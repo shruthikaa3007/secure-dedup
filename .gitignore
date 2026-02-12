@@ -42,6 +42,8 @@ training_data.csv
 *.rar
 model_metadata.json
 training_metrics.json
+evaluation_report.json
+evaluation_report.md
 scaler.pkl
 isolation_forest.pkl
 one_class_svm.pkl

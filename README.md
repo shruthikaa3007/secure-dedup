@@ -5,6 +5,8 @@ Secure deduplication prototype with:
 - behavioral feature extraction,
 - attack/anomaly detection from client behavior.
 
+For setup on a new machine, see `NEW_LAPTOP_SETUP.md`.
+
 ## Training workflow (optimized)
 
 `train_model.py` now supports two modes:
@@ -46,6 +48,11 @@ python prepare_training_data.py \
 python train_model.py --dataset training_data.csv --model-dir .
 ```
 
+Each training run now auto-generates:
+- `evaluation_report.json`
+- `evaluation_report.md`
+These include PR-AUC, F1, confusion matrix, and prediction summary.
+
 Useful options:
 
 ```bash
@@ -74,6 +81,18 @@ Disable dense autoencoder in unsupervised mode:
 python train_model.py --dataset training_data.csv --force-unsupervised --disable-autoencoder
 ```
 
+Skip auto-evaluation report generation:
+
+```bash
+python train_model.py --dataset training_data.csv --skip-evaluation
+```
+
+Run evaluation manually:
+
+```bash
+python evaluate_model.py --dataset training_data.csv --model-dir .
+```
+
 ## Artifacts produced
 
 Supervised mode:
@@ -81,12 +100,16 @@ Supervised mode:
 - `attack_label_encoder.pkl`
 - `training_metrics.json`
 - `model_metadata.json`
+- `evaluation_report.json`
+- `evaluation_report.md`
 
 Unsupervised mode:
 - `isolation_forest.pkl`
 - `one_class_svm.pkl`
 - `scaler.pkl`
 - `model_metadata.json`
+- `evaluation_report.json`
+- `evaluation_report.md`
 - `dense_autoencoder.keras` *(optional)*
 - `dense_ae_threshold.npy` *(optional)*
 - `lstm_autoencoder.keras` *(optional)*
