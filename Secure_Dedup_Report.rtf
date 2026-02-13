@@ -1,0 +1,157 @@
+{\rtf1\ansi\deff0
+{\fonttbl
+{\f0 Times New Roman;}
+{\f1 Courier New;}
+}
+\paperw12240\paperh15840\margl1440\margr1440\margt1440\margb1440
+\pard\qc\b\fs36 Secure Deduplication with Ownership Verification and Anomaly Detection\b0\fs24\par
+\pard\qc\i Technical Report\i0\par
+\pard\qc February 12, 2026\par
+\pard\par
+\pard\b Abstract\b0\par
+\pard This report documents a secure deduplication prototype that combines content chunking, chunk-level hashing, proof-of-ownership (PoW), and behavior-based attack detection. The system supports duplicate-safe uploads, protects against ownership fraud, and applies runtime policy actions (ALLOW, RATE_LIMIT, BLOCK) based on a learned risk score. In the current run configuration, the deployed detection mode is unsupervised using Isolation Forest and One-Class SVM with weighted voting.\par
+\pard\par
+\pard\b 1. Problem Statement and Objectives\b0\par
+\pard Cloud deduplication reduces storage by reusing identical chunks, but introduces security risks: (1) adversaries can probe for existing content, (2) unauthorized clients can claim duplicate ownership, and (3) high-rate duplicate queries can drive denial-of-service behavior. The project objectives are:\par
+\pard 1) Preserve storage efficiency through chunk-level deduplication.\par
+\pard 2) Verify duplicate ownership before reference reuse.\par
+\pard 3) Detect anomalous client behavior and enforce policy controls in real time.\par
+\pard\par
+\pard\b 2. System Architecture\b0\par
+\pard\b API Layer\b0: FastAPI endpoints implement /upload, /pow/challenge, /pow/verify, and /health.\par
+\pard\b Data Path\b0: Uploaded bytes are chunked (FastCDC or fixed-size fallback), each chunk is hashed using SHA-256, dedup index is queried, then new chunks are stored in MinIO or local disk.\par
+\pard\b Index Layer\b0: Reference counts are maintained in Redis, with in-memory fallback when Redis is unavailable.\par
+\pard\b Telemetry Layer\b0: Request events and feature snapshots are persisted to SQLite and CSV for training/evaluation.\par
+\pard\b Detection Layer\b0: Runtime detector prefers supervised artifacts when available; otherwise it executes unsupervised weighted anomaly voting.\par
+\pard\b Policy Layer\b0: Risk score thresholds map to ALLOW, RATE_LIMIT, or BLOCK with cooldown enforcement.\par
+\pard\par
+\pard\b 3. Mathematical Formulation\b0\par
+\pard\b 3.1 Chunk Hashing\b0\par
+\pard For each chunk c_i, the content identifier is:\par
+\pard\qc H_i = SHA256(c_i)\par
+\pard\ql Deduplication checks existence of H_i in the chunk index.\par
+\pard\par
+\pard\b 3.2 Proof-of-Ownership (PoW)\b0\par
+\pard For a duplicate chunk, server issues challenge tuple (n, o, l) where n is nonce, o is byte offset, l is proof length. Client must return:\par
+\pard\qc P = SHA256(n || c[o:o+l])\par
+\pard\ql Verification succeeds iff P equals server-computed value for the stored chunk. Challenge IDs are one-time-use and time-bounded.\par
+\pard\par
+\pard\b 3.3 Behavioral Features\b0\par
+\pard Let N be total events for a client session. Key engineered features include:\par
+\pard requests_per_minute = |events in last 60s|\par
+\pard duplicate_ratio = N_pow / N\par
+\pard pow_attempt_rate = N_pow / N\par
+\pard hash_diversity = N_unique_hashes / N\par
+\pard upload_to_query_ratio = N_upload_chunk / max(1, N_hash_query)\par
+\pard burst_score = N_60s / max(1, N_300s)\par
+\pard session_duration = t_last - t_first\par
+\pard cross_user_hash_overlap = |client_hashes intersect other_clients_hashes|\par
+\pard\par
+\pard\b 3.4 Unsupervised Risk Aggregation\b0\par
+\pard For each model m, anomaly flag a_m belongs to {0,1}. Weighted risk is:\par
+\pard\qc risk = (sum(w_m * a_m)) / (sum(w_m))\par
+\pard\ql Runtime defaults from metadata:\par
+\pard w_IF = 0.25, w_OCSVM = 0.20, w_DAE = 0.25, w_LSTM = 0.30\par
+\pard Current active models: Isolation Forest and One-Class SVM.\par
+\pard Decision rule:\par
+\pard anomaly = 1 if risk >= tau, else 0, with tau = 0.50\par
+\pard\par
+\pard\b 3.5 Policy Mapping\b0\par
+\pard Let r be risk score. Then:\par
+\pard if r >= 0.80 -> BLOCK (HTTP 403)\par
+\pard else if r >= 0.55 -> RATE_LIMIT (HTTP 429)\par
+\pard else -> ALLOW (HTTP 200)\par
+\pard\par
+\pard\b 4. Models and Algorithms\b0\par
+\pard\b 4.1 Supervised Candidate Set (when labels are trainable)\b0\par
+\pard 1) HistGradientBoostingClassifier\par
+\pard 2) RandomForestClassifier\par
+\pard 3) LogisticRegression\par
+\pard Model selection uses GridSearchCV with StratifiedKFold and scoring metric f1_macro.\par
+\pard\par
+\pard\b 4.2 Unsupervised Stack\b0\par
+\pard 1) Isolation Forest (contamination default 0.05, estimators default 300)\par
+\pard 2) One-Class SVM (RBF kernel, nu default 0.05)\par
+\pard 3) Optional Dense Autoencoder (if TensorFlow installed)\par
+\pard 4) Optional LSTM Autoencoder (sequence length default 10, if TensorFlow installed)\par
+\pard\par
+\pard\b 4.3 Upload + Dedup + PoW Algorithm (runtime)\b0\par
+\pard\f1
+Algorithm UploadAndVerify(file, client):\line
+  chunks <- Chunk(file)\line
+  for each chunk in chunks:\line
+    h <- SHA256(chunk)\line
+    if h exists in dedup index:\line
+      require valid PoW for (client, h)\line
+      if no valid proof: return 409 with challenge\line
+  for each chunk in chunks:\line
+    if h not exists: store chunk and create ref_count=1\line
+    else: increment ref_count\line
+  features <- ExtractFeatures(client_logs)\line
+  detect <- Detect(features)\line
+  policy <- DecidePolicy(detect.risk)\line
+  persist features + label + policy\line
+  return success payload\f0\par
+\pard\par
+\pard\b 5. Evaluation Metrics\b0\par
+\pard Binary anomaly metrics (normal vs anomaly):\par
+\pard Precision = TP / (TP + FP)\par
+\pard Recall = TP / (TP + FN)\par
+\pard F1 = 2 * Precision * Recall / (Precision + Recall)\par
+\pard PR-AUC = area under precision-recall curve\par
+\pard Confusion matrix tracks [TN, FP; FN, TP].\par
+\pard\par
+\pard For multiclass supervised runs, macro-F1 and one-vs-rest PR-AUC are reported.\par
+\pard\par
+\pard\b 6. Current Run Results (from evaluation_report.json)\b0\par
+\pard\b 6.1 Dataset and Mode\b0\par
+\pard Rows evaluated: 72\par
+\pard Mode from metadata: unsupervised\par
+\pard Mode evaluated: unsupervised\par
+\pard Feature dimensions: 12\par
+\pard\par
+\pard\b 6.2 Label Distribution in training_data.csv\b0\par
+\pard dedup_dos: 42 (58.33%)\par
+\pard ownership_fraud: 23 (31.94%)\par
+\pard hash_probing: 7 (9.72%)\par
+\pard\par
+\pard\b 6.3 Prediction Summary\b0\par
+\pard Predicted normal: 68\par
+\pard Predicted anomaly: 4\par
+\pard Predicted anomaly rate: 0.0556\par
+\pard Mean risk score: 0.0926\par
+\pard Unsupervised threshold: 0.50\par
+\pard\par
+\pard\b 6.4 Metric Availability Note\b0\par
+\pard Binary PR-AUC and F1 are marked unavailable in this evaluation because the provided ground truth mapped to a single binary class (all non-normal labels), making normal-vs-anomaly discrimination metrics non-informative for that split.\par
+\pard\par
+\pard\b 7. Security and Engineering Assessment\b0\par
+\pard\b Strengths\b0\par
+\pard 1) PoW challenge-response blocks unauthorized duplicate claims.\par
+\pard 2) Stateful one-time challenge usage reduces replay risk.\par
+\pard 3) Risk-based policy control enables adaptive throttling/blocking.\par
+\pard 4) Redis/MinIO fallbacks improve local deploy resilience.\par
+\pard\par
+\pard\b Current Limitations\b0\par
+\pard 1) Limited class balance for binary anomaly evaluation in current dataset snapshot.\par
+\pard 2) Optional deep models are inactive unless TensorFlow artifacts are present.\par
+\pard 3) Fixed thresholds may require environment-specific calibration.\par
+\pard\par
+\pard\b 8. Recommended Next Steps\b0\par
+\pard 1) Collect and retain explicitly normal traffic windows to stabilize binary evaluation metrics.\par
+\pard 2) Run supervised mode on relabeled balanced data and compare macro-F1 vs unsupervised baseline.\par
+\pard 3) Enable dense/LSTM autoencoders and tune weighted ensemble thresholds using validation curves.\par
+\pard 4) Add per-attack confusion matrices and calibration plots to periodic evaluation reports.\par
+\pard\par
+\pard\b 9. Conclusion\b0\par
+\pard The implemented system is a practical secure dedup pipeline that ties storage efficiency to ownership verification and behavior-aware defense. The architecture already supports production-relevant controls (PoW, risk scoring, and policy cooldowns), and can be further improved through better class-balanced evaluation data and calibrated thresholding.\par
+\pard\par
+\pard\b Appendix A: Core Configuration Defaults\b0\par
+\pard RATE_LIMIT_THRESHOLD = 0.55\par
+\pard BLOCK_THRESHOLD = 0.80\par
+\pard RATE_LIMIT_COOLDOWN_SEC = 30\par
+\pard BLOCK_COOLDOWN_SEC = 180\par
+\pard POW_CHALLENGE_TTL_SEC = 120\par
+\pard POW_VERIFIED_TTL_SEC = 300\par
+\pard Unsupervised anomaly threshold = 0.50\par
+}
