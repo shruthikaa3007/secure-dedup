@@ -2,13 +2,15 @@
 
 ## 1. Project Modules and Descriptions
 
-| Module | Description | Main Files |
-|---|---|---|
-| API Orchestration + Security | Handles `/upload`, `/pow/challenge`, `/pow/verify`, API-key validation, and stable client identity. | `app.py`, `auth.py` |
-| Deduplication + Storage | Splits file into chunks, hashes chunks, checks duplicate existence, stores only new chunks, increments reference count for duplicates. | `chunking.py`, `hashing.py`, `dedup_index.py`, `storage.py` |
-| Adaptive PoW + Reputation | Enforces proof-of-ownership for duplicates and adapts challenge difficulty using risk, reputation, and duplicate pressure. | `pow.py`, `pow_session.py`, `adaptive_pow.py`, `reputation.py` |
-| Behavioral Detection + Policy | Extracts request behavior features, performs anomaly/attack detection (supervised or unsupervised), and maps risk to `ALLOW` / `RATE_LIMIT` / `BLOCK`. | `features.py`, `detector.py`, `policy_engine.py` |
-| Telemetry + Training/Evaluation | Logs events and features, stores labeled results, trains models, and generates evaluation reports. | `logger.py`, `feature_store.py`, `train_model.py`, `evaluate_model.py` |
+| Module | Status | Description | Main Files / Planned Endpoints |
+|---|---|---|---|
+| API Orchestration + Security | Completed | Handles `/upload`, `/pow/challenge`, `/pow/verify`, API-key validation, and stable client identity. | `app.py`, `auth.py` |
+| Deduplication + Storage | Completed | Splits file into chunks, hashes chunks, checks duplicate existence, stores only new chunks, and increments reference count for duplicates. | `chunking.py`, `hashing.py`, `dedup_index.py`, `storage.py` |
+| Adaptive PoW + Reputation | Completed | Enforces proof-of-ownership for duplicates and adapts challenge difficulty using risk, reputation, and duplicate pressure. | `pow.py`, `pow_session.py`, `adaptive_pow.py`, `reputation.py` |
+| Behavioral Detection + Policy | Completed | Extracts request behavior features, performs anomaly/attack detection (supervised or unsupervised), and maps risk to `ALLOW` / `RATE_LIMIT` / `BLOCK`. | `features.py`, `detector.py`, `policy_engine.py` |
+| Telemetry + Training/Evaluation | Completed | Logs events and features, stores labeled results, trains models, and generates evaluation reports. | `logger.py`, `feature_store.py`, `train_model.py`, `evaluate_model.py` |
+| Cloud Auditing Module | Next to implement | Adds challenge-response integrity audit over stored chunks and persistent audit evidence. | Planned: `POST /audit/challenge`, `POST /audit/verify` |
+| Ownership + Data Dynamics Module | Next to implement | Adds ownership lifecycle (`grant/revoke/transfer`) and file-recipe update/delete/version support. | Planned: ownership event store + recipe version operations |
 
 ---
 
@@ -165,6 +167,14 @@ function HANDLE_UPLOAD(file, client_id):
 - Dataset used in current evaluation:
   - `demo_detection_results.csv` rows: `103`
   - Label distribution: normal=17, anomalies=86 (ownership_fraud=60, hash_probing=18, dedup_dos=8)
+
+### 5.6 Next Modules to Implement
+- Cloud Auditing Module:
+  - Add stored-chunk integrity auditing workflow with challenge/verify endpoints.
+  - Planned endpoints: `POST /audit/challenge`, `POST /audit/verify`.
+- Ownership + Data Dynamics Module:
+  - Add ownership event lifecycle: `grant`, `revoke`, `transfer`.
+  - Add file-recipe versioning and update/delete support.
 
 ---
 
