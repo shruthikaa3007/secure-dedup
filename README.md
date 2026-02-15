@@ -159,7 +159,17 @@ Adaptive PoW and reputation are enabled at runtime:
 
 ## Runtime configuration
 
-Storage backend (MinIO) can be configured with environment variables:
+Storage backend can be configured with:
+- `STORAGE_BACKEND` (`auto`/`localstack`/`minio`/`filesystem`, default `auto`)
+- `S3_BUCKET` (default `chunks`)
+
+LocalStack S3 settings:
+- `LOCALSTACK_ENDPOINT` (default `http://127.0.0.1:4566`)
+- `AWS_ACCESS_KEY_ID` (default `test`)
+- `AWS_SECRET_ACCESS_KEY` (default `test`)
+- `AWS_REGION` (default `us-east-1`)
+
+MinIO settings (legacy/optional):
 - `MINIO_ENDPOINT` (default `localhost:9000`)
 - `MINIO_ACCESS_KEY` (default `minioadmin`)
 - `MINIO_SECRET_KEY` (default `minioadmin`)

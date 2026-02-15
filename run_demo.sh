@@ -35,6 +35,20 @@ start_stack() {
   docker compose -f "$STACK_FILE" up -d
 }
 
+wait_for_localstack() {
+  local endpoint="${LOCALSTACK_ENDPOINT:-http://127.0.0.1:4566}"
+  echo "Waiting for LocalStack at ${endpoint} ..."
+  for _ in $(seq 1 30); do
+    if curl -fsS "${endpoint}/_localstack/health" >/dev/null 2>&1 || \
+       curl -fsS "${endpoint}" >/dev/null 2>&1; then
+      echo "LocalStack is reachable."
+      return
+    fi
+    sleep 1
+  done
+  echo "Warning: LocalStack not reachable yet. API may fall back to local filesystem storage."
+}
+
 stop_stack() {
   if ! command -v docker >/dev/null 2>&1; then
     return
@@ -52,15 +66,17 @@ run_api() {
   export API_KEYS="${API_KEYS:-dev-api-key}"
   export MODEL_DIR="$(choose_model_dir)"
 
-  export MINIO_ENDPOINT="${MINIO_ENDPOINT:-127.0.0.1:9000}"
-  export MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-minioadmin}"
-  export MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-minioadmin}"
-  export MINIO_SECURE="${MINIO_SECURE:-false}"
-  export MINIO_BUCKET="${MINIO_BUCKET:-chunks}"
+  export STORAGE_BACKEND="${STORAGE_BACKEND:-localstack}"
+  export LOCALSTACK_ENDPOINT="${LOCALSTACK_ENDPOINT:-http://127.0.0.1:4566}"
+  export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-test}"
+  export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-test}"
+  export AWS_REGION="${AWS_REGION:-us-east-1}"
+  export S3_BUCKET="${S3_BUCKET:-chunks}"
 
   echo "Starting API on ${APP_HOST}:${APP_PORT}"
   echo "MODEL_DIR=${MODEL_DIR}"
-  echo "MINIO_ENDPOINT=${MINIO_ENDPOINT}"
+  echo "STORAGE_BACKEND=${STORAGE_BACKEND}"
+  echo "LOCALSTACK_ENDPOINT=${LOCALSTACK_ENDPOINT}"
 
   .venv/bin/uvicorn app:app --host "$APP_HOST" --port "$APP_PORT" --reload
 }
@@ -95,7 +111,7 @@ usage() {
 Usage: ./run_demo.sh <command>
 
 Commands:
-  start   Start local stack (Redis + MinIO) and run API
+  start   Start local stack (Redis + LocalStack S3) and run API
   stop    Stop local stack
   test    Run smoke test against running API
 EOF
@@ -105,7 +121,9 @@ cmd="${1:-start}"
 
 case "$cmd" in
   start)
+    export LOCALSTACK_ENDPOINT="${LOCALSTACK_ENDPOINT:-http://127.0.0.1:4566}"
     start_stack
+    wait_for_localstack
     run_api
     ;;
   stop)

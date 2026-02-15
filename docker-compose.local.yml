@@ -7,19 +7,19 @@ services:
     ports:
       - "6379:6379"
 
-  minio:
-    image: minio/minio:latest
-    container_name: secure_dedup_minio
+  localstack:
+    image: localstack/localstack:latest
+    container_name: secure_dedup_localstack
     restart: unless-stopped
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    command: server /data --console-address ":9001"
+      SERVICES: s3
+      AWS_DEFAULT_REGION: us-east-1
+      DEBUG: 0
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "4566:4566"
     volumes:
-      - minio_data:/data
+      - localstack_data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
-  minio_data:
+  localstack_data:

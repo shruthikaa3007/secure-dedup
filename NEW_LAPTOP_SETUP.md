@@ -34,15 +34,14 @@ Copy these into the same paths on the new machine:
 
 If you cannot copy artifacts, you can retrain later; for tomorrow demo, copying is fastest.
 
-## 4) Start Local Stack (Redis + MinIO)
+## 4) Start Local Stack (Redis + LocalStack S3)
 
 ```bash
 docker compose -f docker-compose.local.yml up -d
 docker compose -f docker-compose.local.yml ps
 ```
 
-MinIO console: `http://127.0.0.1:9001`  
-Username/password: `minioadmin` / `minioadmin`
+LocalStack endpoint: `http://127.0.0.1:4566`
 
 ## 5) Start API with Advanced Model Artifacts
 
@@ -52,11 +51,12 @@ source .venv/bin/activate
 export API_KEYS=dev-api-key
 export MODEL_DIR=advanced_artifacts
 
-export MINIO_ENDPOINT=127.0.0.1:9000
-export MINIO_ACCESS_KEY=minioadmin
-export MINIO_SECRET_KEY=minioadmin
-export MINIO_SECURE=false
-export MINIO_BUCKET=chunks
+export STORAGE_BACKEND=localstack
+export LOCALSTACK_ENDPOINT=http://127.0.0.1:4566
+export AWS_ACCESS_KEY_ID=test
+export AWS_SECRET_ACCESS_KEY=test
+export AWS_REGION=us-east-1
+export S3_BUCKET=chunks
 
 uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 ```
@@ -107,7 +107,7 @@ curl -X POST "http://127.0.0.1:8000/upload" \
 The app has fallbacks:
 
 - No Redis -> in-memory dedup/reputation state
-- No MinIO -> local filesystem chunks (`local_chunks/`)
+- No object storage backend -> local filesystem chunks (`local_chunks/`)
 
 So you can still run:
 
