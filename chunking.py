@@ -29,14 +29,32 @@ def chunk_file(
         return _fixed_chunks(data, chunk_size=avg_size)
 
     chunks = []
-    for chunk in pyfastcdc.fastcdc(
-        data,
-        min_size=min_size,
-        avg_size=avg_size,
-        max_size=max_size,
-    ):
-        if chunk.data:
-            chunks.append(chunk.data)
+    iterator = None
+
+    # Support both pyfastcdc APIs:
+    # - older: pyfastcdc.fastcdc(...)
+    # - newer: pyfastcdc.FastCDC(...).cut_buf(...)
+    if hasattr(pyfastcdc, "fastcdc"):
+        iterator = pyfastcdc.fastcdc(
+            data,
+            min_size=min_size,
+            avg_size=avg_size,
+            max_size=max_size,
+        )
+    elif hasattr(pyfastcdc, "FastCDC"):
+        chunker = pyfastcdc.FastCDC(
+            avg_size=avg_size,
+            min_size=min_size,
+            max_size=max_size,
+        )
+        iterator = chunker.cut_buf(data)
+    else:
+        return _fixed_chunks(data, chunk_size=avg_size)
+
+    for chunk in iterator:
+        chunk_data = getattr(chunk, "data", None)
+        if chunk_data:
+            chunks.append(bytes(chunk_data))
 
     if not chunks:
         return [data]
