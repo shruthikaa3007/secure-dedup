@@ -51,6 +51,10 @@ source .venv/bin/activate
 export API_KEYS=dev-api-key
 export MODEL_DIR=advanced_artifacts
 
+# Demo-safe policy tuning (avoids rate-limiting benign first uploads)
+export RATE_LIMIT_THRESHOLD=0.70
+export BLOCK_THRESHOLD=0.90
+
 export STORAGE_BACKEND=localstack
 export LOCALSTACK_ENDPOINT=http://127.0.0.1:4566
 export AWS_ACCESS_KEY_ID=test
