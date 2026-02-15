@@ -1,0 +1,134 @@
+{
+  "generated_at_utc": "2026-02-15T08:31:53.200740+00:00",
+  "dataset_path": "demo_detection_results.csv",
+  "model_dir": "extra_trees_artifacts",
+  "mode_from_metadata": "supervised",
+  "mode_evaluated": "supervised",
+  "rows_evaluated": 103,
+  "label_column": "attack_label",
+  "feature_columns": [
+    "requests_per_minute",
+    "requests_per_5_min",
+    "requests_per_hour",
+    "unique_hash_count",
+    "duplicate_ratio",
+    "pow_attempt_rate",
+    "hash_diversity",
+    "upload_to_query_ratio",
+    "inter_request_time_variance",
+    "burst_score",
+    "session_duration",
+    "cross_user_hash_overlap"
+  ],
+  "binary_metrics": {
+    "available": true,
+    "positive_class": "anomaly",
+    "confusion_matrix_labels": [
+      "normal",
+      "anomaly"
+    ],
+    "confusion_matrix": [
+      [
+        16,
+        1
+      ],
+      [
+        0,
+        86
+      ]
+    ],
+    "f1_binary": 0.9942196531791907,
+    "f1_macro": 0.9819583114380802,
+    "precision": 0.9885057471264368,
+    "recall": 1.0,
+    "pr_auc": 0.9995943387705505,
+    "truth_class_counts": {
+      "normal": 17,
+      "anomaly": 86
+    }
+  },
+  "multiclass_metrics": {
+    "available": true,
+    "labels": [
+      "dedup_dos",
+      "hash_probing",
+      "normal",
+      "ownership_fraud"
+    ],
+    "confusion_matrix": [
+      [
+        7,
+        1,
+        0,
+        0
+      ],
+      [
+        0,
+        18,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        16,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        60
+      ]
+    ],
+    "f1_macro": 0.9625996810207337,
+    "classification_report": {
+      "dedup_dos": {
+        "precision": 1.0,
+        "recall": 0.875,
+        "f1-score": 0.9333333333333333,
+        "support": 8.0
+      },
+      "hash_probing": {
+        "precision": 0.9,
+        "recall": 1.0,
+        "f1-score": 0.9473684210526315,
+        "support": 18.0
+      },
+      "normal": {
+        "precision": 1.0,
+        "recall": 0.9411764705882353,
+        "f1-score": 0.9696969696969697,
+        "support": 17.0
+      },
+      "ownership_fraud": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 60.0
+      },
+      "accuracy": 0.9805825242718447,
+      "macro avg": {
+        "precision": 0.975,
+        "recall": 0.9540441176470589,
+        "f1-score": 0.9625996810207337,
+        "support": 103.0
+      },
+      "weighted avg": {
+        "precision": 0.9825242718446602,
+        "recall": 0.9805825242718447,
+        "f1-score": 0.9806227837908982,
+        "support": 103.0
+      }
+    },
+    "pr_auc_ovr_macro": 0.9977941176470588
+  },
+  "prediction_summary": {
+    "predicted_normal": 16,
+    "predicted_anomaly": 87,
+    "predicted_anomaly_rate": 0.8446601941747572,
+    "mean_risk_score": 0.8339158576051778,
+    "unsupervised_threshold": null
+  },
+  "notes": []
+}

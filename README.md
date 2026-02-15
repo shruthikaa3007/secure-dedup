@@ -6,6 +6,7 @@ Secure deduplication prototype with:
 - attack/anomaly detection from client behavior.
 
 For setup on a new machine, see `NEW_LAPTOP_SETUP.md`.
+For quick local demo startup, use `./run_demo.sh start`.
 
 ## Training workflow (optimized)
 
@@ -61,6 +62,27 @@ python train_model.py \
   --model-dir . \
   --cv-folds 3 \
   --scoring f1_macro
+```
+
+Enable advanced supervised candidates (default behavior):
+
+- `extra_trees`
+- `svc_rbf`
+- `mlp_classifier`
+- optional `xgboost` / `lightgbm` if installed
+
+To restrict to baseline supervised candidates only:
+
+```bash
+python train_model.py --dataset training_data.csv --disable-advanced-models
+```
+
+To force a specific supervised model candidate:
+
+```bash
+python train_model.py \
+  --dataset training_data.csv \
+  --preferred-supervised-model extra_trees
 ```
 
 Force unsupervised mode:
@@ -130,6 +152,11 @@ PoW is challenge-based:
 - `POST /pow/verify` to submit client proof,
 - `POST /upload` supports `pow_proofs_json` (form field) to include proof payloads inline.
 
+Adaptive PoW and reputation are enabled at runtime:
+- challenge responses now include `adaptive_profile` (`difficulty_level`, `difficulty_score`, length/window metadata),
+- difficulty selection uses detector-derived risk and client reputation,
+- reputation is updated from PoW verification outcomes and policy actions.
+
 ## Runtime configuration
 
 Storage backend (MinIO) can be configured with environment variables:
@@ -150,11 +177,32 @@ Auth and PoW configuration:
 - `API_KEYS` (comma-separated, default `dev-api-key`)
 - `POW_CHALLENGE_TTL_SEC` (default `120`)
 - `POW_VERIFIED_TTL_SEC` (default `300`)
+- `ADAPTIVE_POW_ENABLED` (`true`/`false`, default `true`)
+- `POW_BASE_PROOF_LENGTH` (default `32`)
+- `POW_MIN_PROOF_LENGTH` (default `16`)
+- `POW_MAX_EXTRA_PROOF_LENGTH` (default `96`)
+- `POW_RISK_WEIGHT` (default `0.65`)
+- `POW_REPUTATION_WEIGHT` (default `0.25`)
+- `POW_DUPLICATE_WEIGHT` (default `0.10`)
+
+Reputation tuning:
+- `REPUTATION_INITIAL_SCORE` (default `0.60`)
+- `REPUTATION_MIN_SCORE` (default `0.05`)
+- `REPUTATION_MAX_SCORE` (default `0.95`)
+- `REPUTATION_HALF_LIFE_SEC` (default `21600`)
+- `REPUTATION_POW_SUCCESS_DELTA` (default `0.04`)
+- `REPUTATION_POW_FAILURE_DELTA` (default `-0.12`)
+- `REPUTATION_RATE_LIMIT_DELTA` (default `-0.05`)
+- `REPUTATION_BLOCK_DELTA` (default `-0.10`)
+- `REPUTATION_BENIGN_DELTA` (default `0.01`)
 
 Durable telemetry:
 - `TELEMETRY_DB` (default `telemetry.db`)
 - `MAX_EVENTS_PER_CLIENT` (default `5000`)
 - `HYDRATE_EVENT_LIMIT` (default `50000`)
+
+Model artifact path:
+- `MODEL_DIR` (default `.`). Set this to use alternate trained artifacts (for example `advanced_artifacts`).
 
 ## Dataset adapters
 

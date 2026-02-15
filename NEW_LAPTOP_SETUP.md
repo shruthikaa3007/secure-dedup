@@ -1,188 +1,131 @@
-# Run This Project on Another Laptop
+# Run on Another Machine (Local Stack Demo)
 
-This guide gives you a repeatable setup path on a fresh machine.
+This is the fastest way to show the project on a new laptop with a local stack.
 
 ## 1) Prerequisites
 
-- OS: macOS/Linux (Windows works with WSL2).
-- Python: `3.10+` (recommended `3.10`).
-- Tools: `git`, `pip`, `venv`.
-- Free disk space:
-  - Code + venv + outputs: at least `5 GB`.
-  - If using FIU/MSRC raw traces: at least `40 GB` free.
+- Python `3.10+`
+- Docker Desktop (or Docker Engine + Compose)
+- `git`
 
-## 2) Get the Project
+## 2) Get Project + Env
 
 ```bash
 git clone <your-repo-url>
 cd secure-dedup
-```
 
-If you are copying the folder directly (USB/Drive), open terminal inside the copied `secure-dedup` folder and continue.
-
-## 3) Create Python Environment
-
-```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Optional (only if you want dense/LSTM autoencoders):
+## 3) Copy Demo Artifacts From Current Machine
+
+Copy these into the same paths on the new machine:
+
+- `advanced_artifacts/` (recommended model set)
+- `demo_detection_results.csv`
+- `pow_comparison_summary.json`
+- `pow_comparison_report.md`
+- `architecture.drawio`
+- `PROGRESS_60.md`
+- `TMRW_TALK_TRACK.md`
+
+If you cannot copy artifacts, you can retrain later; for tomorrow demo, copying is fastest.
+
+## 4) Start Local Stack (Redis + MinIO)
 
 ```bash
-pip install tensorflow
+docker compose -f docker-compose.local.yml up -d
+docker compose -f docker-compose.local.yml ps
 ```
 
-## 4) Choose Your Path
+MinIO console: `http://127.0.0.1:9001`  
+Username/password: `minioadmin` / `minioadmin`
 
-Use one of these two paths.
-
-### Path A: Reuse Existing Prepared Data / Models (Fastest)
-
-Copy these files from your old laptop into this repo root:
-
-- `request_logs.csv` (optional)
-- `feature_dataset.csv` (optional)
-- `detection_results.csv` (optional)
-- `training_data.csv` (optional)
-- `isolation_forest.pkl`
-- `one_class_svm.pkl`
-- `scaler.pkl`
-- `model_metadata.json`
-
-Then run API directly (see step 8).
-
-### Path B: Full Rebuild From Raw Datasets (Recommended for fresh training)
-
-Place raw dataset archives in repo root:
-
-- `FIU-trace.tar`
-- `MSRC-trace-003.tar`
-
-Run ingestion (balanced multi-client sampling):
+## 5) Start API with Advanced Model Artifacts
 
 ```bash
-python dataset_adapters.py revised-tar \
-  --input FIU-trace.tar \
-  --output request_logs_fiu.csv \
-  --max-files 40 \
-  --max-events-per-file 15000
+source .venv/bin/activate
 
-python dataset_adapters.py revised-tar \
-  --input MSRC-trace-003.tar \
-  --output request_logs_msrc.csv \
-  --max-files 40 \
-  --max-events-per-file 15000
-```
-
-Merge both logs:
-
-```bash
-{ head -n 1 request_logs_fiu.csv; tail -n +2 request_logs_fiu.csv; tail -n +2 request_logs_msrc.csv; } > request_logs.csv
-```
-
-Build features + labeled detection dataset:
-
-```bash
-python build_feature_dataset_from_logs.py \
-  --input request_logs.csv \
-  --feature-output feature_dataset.csv \
-  --detection-output detection_results.csv \
-  --min-events 50
-```
-
-Prepare training data:
-
-```bash
-python prepare_training_data.py \
-  --input detection_results.csv \
-  --output training_data.csv \
-  --relabel auto
-```
-
-Train models:
-
-```bash
-python train_model.py \
-  --dataset training_data.csv \
-  --model-dir . \
-  --disable-autoencoder \
-  --disable-lstm
-```
-
-Note: if the label set has no `normal` class, the code now automatically falls back to unsupervised training.
-Each training run auto-generates `evaluation_report.json` and `evaluation_report.md`.
-
-## 5) Validate Outputs
-
-Check that key files exist:
-
-```bash
-ls -1 model_metadata.json isolation_forest.pkl one_class_svm.pkl scaler.pkl
-```
-
-Inspect model mode:
-
-```bash
-cat model_metadata.json
-```
-
-## 6) Run the API Locally
-
-```bash
 export API_KEYS=dev-api-key
+export MODEL_DIR=advanced_artifacts
+
+export MINIO_ENDPOINT=127.0.0.1:9000
+export MINIO_ACCESS_KEY=minioadmin
+export MINIO_SECRET_KEY=minioadmin
+export MINIO_SECURE=false
+export MINIO_BUCKET=chunks
+
 uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Health check:
+Or use the one-command runner:
+
+```bash
+./run_demo.sh start
+```
+
+## 6) Smoke Test
+
+Health:
 
 ```bash
 curl http://127.0.0.1:8000/health
 ```
 
-Simple upload test:
+First upload:
 
 ```bash
-echo "hello dedup" > sample.txt
+echo "hello dedup demo" > sample.txt
 curl -X POST "http://127.0.0.1:8000/upload" \
   -H "X-API-Key: dev-api-key" \
-  -H "X-Client-ID: laptop-test-client" \
+  -H "X-Client-ID: demo-client-1" \
   -F "file=@sample.txt"
 ```
 
-## 7) Optional Services (Not Mandatory)
+Second upload (same file) should trigger duplicate PoW path and return challenge/requirements:
 
-This project works without Redis/MinIO due in-memory and local-file fallbacks.
+```bash
+curl -X POST "http://127.0.0.1:8000/upload" \
+  -H "X-API-Key: dev-api-key" \
+  -H "X-Client-ID: demo-client-1" \
+  -F "file=@sample.txt"
+```
 
-- Redis unavailable: `dedup_index.py` uses in-memory map.
-- MinIO unavailable: `storage.py` writes chunks to `local_chunks/`.
+## 7) What to Show in the Demo
 
-If you want production-like behavior, run Redis + MinIO separately and set env vars from `README.md`.
+1. Runtime architecture (`architecture.drawio`)
+2. Progress + results (`PROGRESS_60.md`)
+3. Talk script (`TMRW_TALK_TRACK.md`)
+4. Comparison result (`pow_comparison_summary.json`, `pow_comparison_report.md`)
+5. Live API flow (`/health`, `/upload`, duplicate-trigger behavior)
 
-## 8) Troubleshooting
+## 8) Optional: Run Without Docker Services
 
-- `ModuleNotFoundError`: activate venv first (`source .venv/bin/activate`).
-- `PermissionError ... SC_SEM_NSEMS_MAX`: use latest code in this repo (training now uses single-process CV).
-- Training is too slow:
-  - lower `--max-files` (example: `20`)
-  - lower `--max-events-per-file` (example: `8000`)
-- `rar` extraction issues for Azure file: skip it for now, FIU/MSRC `.tar` path is already supported.
-- API rejects requests with `403`:
-  - ensure `X-API-Key` matches `API_KEYS`
-  - check anomaly policy cooldown if client was previously blocked
+The app has fallbacks:
 
-## 9) Recommended Repeatable Command Block
+- No Redis -> in-memory dedup/reputation state
+- No MinIO -> local filesystem chunks (`local_chunks/`)
 
-If you want one standard sequence after cloning:
+So you can still run:
 
 ```bash
 source .venv/bin/activate
-python dataset_adapters.py revised-tar --input FIU-trace.tar --output request_logs_fiu.csv --max-files 40 --max-events-per-file 15000
-python dataset_adapters.py revised-tar --input MSRC-trace-003.tar --output request_logs_msrc.csv --max-files 40 --max-events-per-file 15000
-{ head -n 1 request_logs_fiu.csv; tail -n +2 request_logs_fiu.csv; tail -n +2 request_logs_msrc.csv; } > request_logs.csv
-python build_feature_dataset_from_logs.py --input request_logs.csv --feature-output feature_dataset.csv --detection-output detection_results.csv --min-events 50
-python prepare_training_data.py --input detection_results.csv --output training_data.csv --relabel auto
-python train_model.py --dataset training_data.csv --model-dir . --disable-autoencoder --disable-lstm
+export API_KEYS=dev-api-key
+export MODEL_DIR=advanced_artifacts
+uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+```
+
+## 9) Stop Local Stack
+
+```bash
+docker compose -f docker-compose.local.yml down
+```
+
+Or:
+
+```bash
+./run_demo.sh stop
 ```

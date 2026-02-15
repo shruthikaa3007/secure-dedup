@@ -1,4 +1,5 @@
 import json
+import os
 from collections import defaultdict, deque
 from pathlib import Path
 from typing import Dict, List
@@ -7,7 +8,7 @@ import joblib
 import numpy as np
 import pandas as pd
 
-MODEL_DIR = Path(".")
+MODEL_DIR = Path(os.getenv("MODEL_DIR", "."))
 DEFAULT_UNSUPERVISED_WEIGHTS = {
     "isolation_forest": 0.25,
     "one_class_svm": 0.20,

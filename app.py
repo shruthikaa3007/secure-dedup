@@ -1,5 +1,6 @@
 import json
 import os
+from collections import Counter
 from typing import Dict, Optional
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
@@ -20,6 +21,12 @@ from policy_engine import (
     register_policy_action,
 )
 from pow_session import consume_verified, get_or_create_challenge, verify_challenge
+from reputation import (
+    get_reputation,
+    record_benign_activity,
+    record_policy_action as record_reputation_policy_action,
+    record_pow_result,
+)
 from storage import get_chunk, upload_chunk
 
 app = FastAPI()
@@ -57,6 +64,59 @@ def _safe_detect(features: Dict, client_id: str) -> Dict:
         }
 
 
+def _safe_risk(value) -> float:
+    try:
+        return max(0.0, min(1.0, float(value)))
+    except Exception:
+        return 0.0
+
+
+def _compute_adaptive_inputs(client_id: str) -> Dict:
+    reputation_snapshot = get_reputation(client_id)
+    risk_score = 0.0
+    detection_mode = "insufficient_history"
+
+    active_policy = get_active_policy_action(client_id)
+    if active_policy:
+        action = str(active_policy.get("action", "ALLOW")).upper()
+        if action == "BLOCK":
+            risk_score = max(risk_score, 1.0)
+        elif action == "RATE_LIMIT":
+            risk_score = max(risk_score, 0.75)
+
+    history = REQUEST_LOGS.get(client_id)
+    if history and len(history) >= 5:
+        history_features = extract_features(history, REQUEST_LOGS)
+        history_result = _safe_detect(history_features, client_id=client_id)
+        risk_score = max(risk_score, _safe_risk(history_result.get("risk_score", 0.0)))
+        detection_mode = str(history_result.get("detection_mode", "unknown"))
+
+    return {
+        "risk_score": _safe_risk(risk_score),
+        "reputation_score": float(reputation_snapshot.get("score", 0.6)),
+        "detection_mode": detection_mode,
+    }
+
+
+def _challenge_response_payload(challenge: Dict) -> Dict:
+    return {
+        "challenge_id": challenge["challenge_id"],
+        "nonce_hex": challenge["nonce_hex"],
+        "offset": challenge["offset"],
+        "length": challenge["length"],
+        "expires_at": challenge["expires_at"],
+        "adaptive_profile": {
+            "adaptive_enabled": challenge.get("adaptive_enabled", False),
+            "difficulty_level": challenge.get("difficulty_level", "static"),
+            "difficulty_score": challenge.get("difficulty_score", 0.0),
+            "challenge_window_start": challenge.get("challenge_window_start", 0),
+            "challenge_window_end": challenge.get("challenge_window_end", challenge.get("length", 0)),
+            "risk_score": challenge.get("risk_score", 0.0),
+            "reputation_score": challenge.get("reputation_score", 0.6),
+        },
+    }
+
+
 def _raise_policy_exception(client_id: str, policy: Dict, detection: Optional[Dict] = None) -> None:
     detail = {
         "error": "Request blocked by anomaly policy" if policy["action"] == "BLOCK" else "Rate limited by anomaly policy",
@@ -76,6 +136,7 @@ def _enforce_pre_request_policy(client_id: str) -> None:
             "status_code": 429 if active_policy["action"] == "RATE_LIMIT" else 403,
             "remaining_sec": active_policy.get("remaining_sec", 0),
         }
+        record_reputation_policy_action(client_id, policy["action"])
         _raise_policy_exception(client_id, policy)
 
     history = REQUEST_LOGS.get(client_id)
@@ -88,6 +149,7 @@ def _enforce_pre_request_policy(client_id: str) -> None:
 
     if history_policy["action"] in {"RATE_LIMIT", "BLOCK"}:
         register_policy_action(client_id, history_policy["action"])
+        record_reputation_policy_action(client_id, history_policy["action"])
         _raise_policy_exception(client_id, history_policy, history_result)
 
 
@@ -136,19 +198,22 @@ def create_pow_challenge(
         raise HTTPException(status_code=404, detail={"error": "Chunk not found", "chunk_hash": request.chunk_hash})
 
     stored_chunk = get_chunk(request.chunk_hash)
-    challenge = get_or_create_challenge(client_id, request.chunk_hash, len(stored_chunk))
+    adaptive_inputs = _compute_adaptive_inputs(client_id)
+    challenge = get_or_create_challenge(
+        client_id,
+        request.chunk_hash,
+        len(stored_chunk),
+        risk_score=adaptive_inputs["risk_score"],
+        reputation_score=adaptive_inputs["reputation_score"],
+        duplicate_context={"duplicate_hits": 1},
+    )
 
     return {
         "status": "challenge_created",
         "client_id": client_id,
         "chunk_hash": request.chunk_hash,
-        "challenge": {
-            "challenge_id": challenge["challenge_id"],
-            "nonce_hex": challenge["nonce_hex"],
-            "offset": challenge["offset"],
-            "length": challenge["length"],
-            "expires_at": challenge["expires_at"],
-        },
+        "challenge": _challenge_response_payload(challenge),
+        "adaptive_inputs": adaptive_inputs,
     }
 
 
@@ -173,13 +238,30 @@ def verify_pow(
         client_proof=request.proof,
     )
 
+    log_request(
+        client_id=client_id,
+        operation_type="pow_verify",
+        chunk_hash=request.chunk_hash,
+        pow_result=verified,
+    )
+
     if not verified:
-        raise HTTPException(status_code=403, detail={"error": "PoW verification failed"})
+        reputation_snapshot = record_pow_result(client_id, success=False)
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "PoW verification failed",
+                "reputation_score": reputation_snapshot.get("score"),
+            },
+        )
+
+    reputation_snapshot = record_pow_result(client_id, success=True)
 
     return {
         "status": "verified",
         "client_id": client_id,
         "chunk_hash": request.chunk_hash,
+        "reputation": reputation_snapshot,
     }
 
 
@@ -216,6 +298,8 @@ async def upload_file(
 
     chunk_records = [(chunk, hash_chunk(chunk)) for chunk in chunks if chunk]
     recipe = [chunk_hash for _, chunk_hash in chunk_records]
+    duplicate_hits_by_hash = Counter(recipe)
+    adaptive_inputs = _compute_adaptive_inputs(client_id)
 
     supplied_proofs = _parse_pow_proofs(pow_proofs_json)
     verified_duplicate_hashes = set()
@@ -237,6 +321,7 @@ async def upload_file(
                 stored_chunk=stored_chunk,
                 client_proof=proof_payload["proof"],
             )
+            record_pow_result(client_id, success=is_verified)
 
         if not is_verified:
             is_verified = consume_verified(client_id, chunk_hash)
@@ -245,14 +330,17 @@ async def upload_file(
             verified_duplicate_hashes.add(chunk_hash)
             continue
 
-        challenge = get_or_create_challenge(client_id, chunk_hash, len(chunk))
+        challenge = get_or_create_challenge(
+            client_id=client_id,
+            chunk_hash=chunk_hash,
+            chunk_length=len(chunk),
+            risk_score=adaptive_inputs["risk_score"],
+            reputation_score=adaptive_inputs["reputation_score"],
+            duplicate_context={"duplicate_hits": duplicate_hits_by_hash.get(chunk_hash, 1)},
+        )
         pending_challenges_by_hash[chunk_hash] = {
             "chunk_hash": chunk_hash,
-            "challenge_id": challenge["challenge_id"],
-            "nonce_hex": challenge["nonce_hex"],
-            "offset": challenge["offset"],
-            "length": challenge["length"],
-            "expires_at": challenge["expires_at"],
+            **_challenge_response_payload(challenge),
         }
 
     if pending_challenges_by_hash:
@@ -301,13 +389,18 @@ async def upload_file(
                 chunk_hash=chunk_hash,
                 pow_result=True,
             )
+            record_pow_result(client_id, success=True)
 
     client_features = extract_features(REQUEST_LOGS[client_id], REQUEST_LOGS)
     result = _safe_detect(client_features, client_id=client_id)
     policy = decide_response(result)
 
+    reputation_snapshot = get_reputation(client_id)
     if policy["action"] in {"RATE_LIMIT", "BLOCK"}:
         register_policy_action(client_id, policy["action"])
+        reputation_snapshot = record_reputation_policy_action(client_id, policy["action"])
+    else:
+        reputation_snapshot = record_benign_activity(client_id)
 
     attack_label = label_attack(client_features)
 
@@ -330,4 +423,6 @@ async def upload_file(
         "anomaly_result": result,
         "policy_decision": policy,
         "attack_label": attack_label,
+        "adaptive_inputs": adaptive_inputs,
+        "reputation": reputation_snapshot,
     }

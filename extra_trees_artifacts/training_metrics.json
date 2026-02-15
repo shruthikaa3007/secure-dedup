@@ -1,0 +1,100 @@
+{
+  "mode": "supervised",
+  "label_column": "attack_label",
+  "rows": 103,
+  "train_rows": 77,
+  "test_rows": 26,
+  "class_distribution": {
+    "ownership_fraud": 60,
+    "hash_probing": 18,
+    "normal": 17,
+    "dedup_dos": 8
+  },
+  "cv_folds": 3,
+  "scoring": "f1_macro",
+  "best_model": "extra_trees",
+  "best_params": {
+    "model__max_depth": null,
+    "model__min_samples_leaf": 1,
+    "model__n_estimators": 300
+  },
+  "best_cv_score": 0.7507575757575758,
+  "candidate_results": [
+    {
+      "model": "extra_trees",
+      "best_cv_score": 0.7507575757575758,
+      "best_params": {
+        "model__max_depth": null,
+        "model__min_samples_leaf": 1,
+        "model__n_estimators": 300
+      }
+    }
+  ],
+  "failed_models": {},
+  "preferred_supervised_model": "extra_trees",
+  "classification_report": {
+    "dedup_dos": {
+      "precision": 1.0,
+      "recall": 0.5,
+      "f1-score": 0.6666666666666666,
+      "support": 2.0
+    },
+    "hash_probing": {
+      "precision": 0.7142857142857143,
+      "recall": 1.0,
+      "f1-score": 0.8333333333333334,
+      "support": 5.0
+    },
+    "normal": {
+      "precision": 1.0,
+      "recall": 0.75,
+      "f1-score": 0.8571428571428571,
+      "support": 4.0
+    },
+    "ownership_fraud": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 15.0
+    },
+    "accuracy": 0.9230769230769231,
+    "macro avg": {
+      "precision": 0.9285714285714286,
+      "recall": 0.8125,
+      "f1-score": 0.8392857142857143,
+      "support": 26.0
+    },
+    "weighted avg": {
+      "precision": 0.945054945054945,
+      "recall": 0.9230769230769231,
+      "f1-score": 0.9203296703296704,
+      "support": 26.0
+    }
+  },
+  "confusion_matrix": [
+    [
+      1,
+      1,
+      0,
+      0
+    ],
+    [
+      0,
+      5,
+      0,
+      0
+    ],
+    [
+      0,
+      1,
+      3,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      15
+    ]
+  ]
+}

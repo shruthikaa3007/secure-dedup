@@ -1,0 +1,156 @@
+<mxfile host="app.diagrams.net" modified="2026-02-15T00:00:00.000Z" agent="GPT-5.2-Codex" version="24.7.17" editor="diagramly">
+  <diagram id="secure-dedup-architecture" name="Secure Dedup + Adaptive PoW">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1300" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="Secure Deduplication System: Adaptive PoW Architecture" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=24;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="900" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="runtime-box" value="Online Runtime: Upload, Detection, and Adaptive Defense" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#1a73e8;fillColor=#e8f0fe;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="80" width="1360" height="560" as="geometry" />
+        </mxCell>
+
+        <mxCell id="train-box" value="Offline Model and Policy Pipeline" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#188038;fillColor=#e6f4ea;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="670" width="1360" height="450" as="geometry" />
+        </mxCell>
+
+        <mxCell id="client" value="Client Applications" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3cd;strokeColor=#d39e00;" vertex="1" parent="1">
+          <mxGeometry x="80" y="170" width="160" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="fastapi" value="API Service (FastAPI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="280" y="170" width="190" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="chunking" value="Chunking &amp; Fingerprinting" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="520" y="170" width="220" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="dedup" value="Deduplication Engine" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="790" y="170" width="210" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="newchunk" value="New Chunk Path" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="790" y="290" width="210" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="pow-gateway" value="PoW Verification Gateway" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="790" y="410" width="210" height="95" as="geometry" />
+        </mxCell>
+
+        <mxCell id="adaptive-pow" value="Adaptive PoW Controller&#xa;(difficulty + challenge profile)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffd6e7;strokeColor=#ad1457;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="400" width="230" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="storage" value="Chunk Storage" style="shape=cylinder;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="1290" y="180" width="170" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="indexstore" value="Fingerprint Index" style="shape=cylinder;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="1290" y="320" width="170" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="logger" value="Request Telemetry" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="280" y="300" width="210" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="features" value="Behavioral Feature Extraction" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="520" y="300" width="220" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="detector" value="Anomaly Detection Ensemble" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="520" y="430" width="220" height="105" as="geometry" />
+        </mxCell>
+
+        <mxCell id="policy" value="Policy Engine&#xa;(ALLOW / RATE_LIMIT / BLOCK)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="790" y="540" width="210" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="reputation" value="Client Reputation Engine&#xa;(decay + trust score)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fce5cd;strokeColor=#b45f06;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="540" width="230" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="featurestore" value="Feature + Detection Store" style="shape=cylinder;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="1290" y="430" width="170" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="profile-store" value="Difficulty Profile Store" style="shape=cylinder;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#f4cccc;strokeColor=#cc0000;" vertex="1" parent="1">
+          <mxGeometry x="1290" y="540" width="170" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="dataset" value="Historical Traces / Logs" style="shape=cylinder;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="80" y="780" width="230" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="prep" value="Data Preparation Pipeline" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="340" y="780" width="260" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="model-train" value="Model Training Pipeline" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="630" y="780" width="230" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="models" value="Model Registry &amp; Artifacts" style="shape=cylinder;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="900" y="760" width="250" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="threshold-cal" value="Risk Threshold Calibration" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d9ead3;strokeColor=#38761d;" vertex="1" parent="1">
+          <mxGeometry x="630" y="930" width="230" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="policy-cal" value="Policy / Cooldown Tuning" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d9ead3;strokeColor=#38761d;" vertex="1" parent="1">
+          <mxGeometry x="900" y="930" width="250" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="simulator-cfg" value="Adaptive Policy Config" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ead1dc;strokeColor=#741b47;" vertex="1" parent="1">
+          <mxGeometry x="1180" y="930" width="180" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="deploy-gate" value="Deployment Gate&#xa;(approved model + policy + adaptive PoW profile)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe2f3;strokeColor=#0b5394;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1180" y="780" width="180" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;" edge="1" parent="1" source="client" target="fastapi"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;" edge="1" parent="1" source="fastapi" target="chunking"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;" edge="1" parent="1" source="chunking" target="dedup"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" value="not exists" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;strokeColor=#188038;" edge="1" parent="1" source="dedup" target="newchunk"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" value="exists" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;strokeColor=#d79b00;" edge="1" parent="1" source="dedup" target="pow-gateway"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e6" value="challenge params request" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;strokeColor=#ad1457;" edge="1" parent="1" source="pow-gateway" target="adaptive-pow"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e7" value="difficulty profile" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;strokeColor=#ad1457;" edge="1" parent="1" source="adaptive-pow" target="pow-gateway"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;" edge="1" parent="1" source="newchunk" target="storage"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;" edge="1" parent="1" source="pow-gateway" target="storage"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e10" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;" edge="1" parent="1" source="newchunk" target="indexstore"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e11" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;" edge="1" parent="1" source="pow-gateway" target="indexstore"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e12" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;" edge="1" parent="1" source="fastapi" target="logger"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e13" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;" edge="1" parent="1" source="logger" target="features"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e14" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;" edge="1" parent="1" source="features" target="detector"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e15" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;" edge="1" parent="1" source="detector" target="policy"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e16" value="enforce action" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;" edge="1" parent="1" source="policy" target="fastapi"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e17" value="risk score" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;strokeColor=#ad1457;" edge="1" parent="1" source="detector" target="adaptive-pow"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e18" value="behavior events" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;strokeColor=#b45f06;" edge="1" parent="1" source="logger" target="reputation"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e19" value="reputation score" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;strokeColor=#b45f06;" edge="1" parent="1" source="reputation" target="adaptive-pow"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e20" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;strokeColor=#cc0000;" edge="1" parent="1" source="adaptive-pow" target="profile-store"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e21" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;" edge="1" parent="1" source="detector" target="featurestore"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e22" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;" edge="1" parent="1" source="policy" target="featurestore"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e23" value="historical context" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;dashed=1;" edge="1" parent="1" source="featurestore" target="detector"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e30" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;strokeColor=#188038;" edge="1" parent="1" source="dataset" target="prep"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e31" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;strokeColor=#188038;" edge="1" parent="1" source="prep" target="model-train"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e32" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;strokeColor=#188038;" edge="1" parent="1" source="model-train" target="models"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e33" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;strokeColor=#0b5394;" edge="1" parent="1" source="models" target="deploy-gate"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e34" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;strokeColor=#38761d;" edge="1" parent="1" source="threshold-cal" target="deploy-gate"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e35" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;strokeColor=#38761d;" edge="1" parent="1" source="policy-cal" target="deploy-gate"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e36" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;strokeColor=#741b47;" edge="1" parent="1" source="simulator-cfg" target="deploy-gate"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e37" value="deploy model" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;dashed=1;strokeColor=#1a73e8;" edge="1" parent="1" source="deploy-gate" target="detector"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e38" value="deploy policy" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;dashed=1;strokeColor=#1a73e8;" edge="1" parent="1" source="deploy-gate" target="policy"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e39" value="deploy adaptive profile" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;dashed=1;strokeColor=#ad1457;" edge="1" parent="1" source="deploy-gate" target="adaptive-pow"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e40" value="historical outcomes" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;dashed=1;strokeColor=#38761d;" edge="1" parent="1" source="featurestore" target="threshold-cal"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e41" value="telemetry replay" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;dashed=1;strokeColor=#188038;" edge="1" parent="1" source="logger" target="prep"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

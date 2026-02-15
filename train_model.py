@@ -6,14 +6,20 @@ from typing import Dict, List, Optional, Tuple
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import HistGradientBoostingClassifier, IsolationForest, RandomForestClassifier
+from sklearn.ensemble import (
+    ExtraTreesClassifier,
+    HistGradientBoostingClassifier,
+    IsolationForest,
+    RandomForestClassifier,
+)
 from sklearn.impute import SimpleImputer
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.model_selection import GridSearchCV, StratifiedKFold, train_test_split
+from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.svm import OneClassSVM
-from sklearn.linear_model import LogisticRegression
+from sklearn.svm import OneClassSVM, SVC
 
 from evaluate_model import evaluate_and_write_reports
 
@@ -69,6 +75,22 @@ def parse_args() -> argparse.Namespace:
         "--scoring",
         default="f1_macro",
         help="GridSearchCV scoring metric for supervised mode (default: f1_macro)",
+    )
+    parser.add_argument(
+        "--disable-advanced-models",
+        action="store_true",
+        help=(
+            "Use only baseline supervised candidates "
+            "(HistGradientBoosting, RandomForest, LogisticRegression)"
+        ),
+    )
+    parser.add_argument(
+        "--preferred-supervised-model",
+        default="",
+        help=(
+            "Optionally force one supervised candidate name "
+            "(e.g., extra_trees, svc_rbf, mlp_classifier, random_forest)"
+        ),
     )
     parser.add_argument(
         "--contamination",
@@ -247,8 +269,75 @@ def get_numeric_features(df: pd.DataFrame, exclude: List[str]) -> pd.DataFrame:
     return X
 
 
-def supervised_candidates(random_state: int) -> Dict[str, Tuple[Pipeline, Dict[str, List]]]:
-    return {
+def _optional_external_boosters(
+    random_state: int,
+) -> Dict[str, Tuple[Pipeline, Dict[str, List]]]:
+    optional: Dict[str, Tuple[Pipeline, Dict[str, List]]] = {}
+
+    try:
+        from xgboost import XGBClassifier
+
+        optional["xgboost"] = (
+            Pipeline(
+                [
+                    ("imputer", SimpleImputer(strategy="median")),
+                    (
+                        "model",
+                        XGBClassifier(
+                            random_state=random_state,
+                            n_jobs=1,
+                            objective="multi:softprob",
+                            eval_metric="mlogloss",
+                            tree_method="hist",
+                        ),
+                    ),
+                ]
+            ),
+            {
+                "model__n_estimators": [200, 400],
+                "model__max_depth": [4, 6],
+                "model__learning_rate": [0.05, 0.1],
+                "model__subsample": [0.8, 1.0],
+            },
+        )
+    except Exception:
+        pass
+
+    try:
+        from lightgbm import LGBMClassifier
+
+        optional["lightgbm"] = (
+            Pipeline(
+                [
+                    ("imputer", SimpleImputer(strategy="median")),
+                    (
+                        "model",
+                        LGBMClassifier(
+                            random_state=random_state,
+                            n_estimators=300,
+                            class_weight="balanced",
+                            verbosity=-1,
+                        ),
+                    ),
+                ]
+            ),
+            {
+                "model__n_estimators": [200, 400],
+                "model__num_leaves": [31, 63],
+                "model__learning_rate": [0.05, 0.1],
+            },
+        )
+    except Exception:
+        pass
+
+    return optional
+
+
+def supervised_candidates(
+    random_state: int,
+    include_advanced: bool = True,
+) -> Dict[str, Tuple[Pipeline, Dict[str, List]]]:
+    candidates: Dict[str, Tuple[Pipeline, Dict[str, List]]] = {
         "hist_gradient_boosting": (
             Pipeline(
                 [
@@ -306,6 +395,77 @@ def supervised_candidates(random_state: int) -> Dict[str, Tuple[Pipeline, Dict[s
         ),
     }
 
+    if include_advanced:
+        candidates.update(
+            {
+                "extra_trees": (
+                    Pipeline(
+                        [
+                            ("imputer", SimpleImputer(strategy="median")),
+                            (
+                                "model",
+                                ExtraTreesClassifier(
+                                    random_state=random_state,
+                                    class_weight="balanced_subsample",
+                                    n_jobs=1,
+                                ),
+                            ),
+                        ]
+                    ),
+                    {
+                        "model__n_estimators": [300, 500],
+                        "model__max_depth": [None, 16],
+                        "model__min_samples_leaf": [1, 2],
+                    },
+                ),
+                "svc_rbf": (
+                    Pipeline(
+                        [
+                            ("imputer", SimpleImputer(strategy="median")),
+                            ("scaler", StandardScaler()),
+                            (
+                                "model",
+                                SVC(
+                                    kernel="rbf",
+                                    class_weight="balanced",
+                                    probability=True,
+                                    random_state=random_state,
+                                ),
+                            ),
+                        ]
+                    ),
+                    {
+                        "model__C": [1.0, 3.0, 10.0],
+                        "model__gamma": ["scale", 0.1, 0.01],
+                    },
+                ),
+                "mlp_classifier": (
+                    Pipeline(
+                        [
+                            ("imputer", SimpleImputer(strategy="median")),
+                            ("scaler", StandardScaler()),
+                            (
+                                "model",
+                                MLPClassifier(
+                                    random_state=random_state,
+                                    max_iter=1500,
+                                    early_stopping=True,
+                                ),
+                            ),
+                        ]
+                    ),
+                    {
+                        "model__hidden_layer_sizes": [(64, 32), (128, 64)],
+                        "model__alpha": [1e-4, 1e-3],
+                        "model__learning_rate_init": [1e-3, 5e-4],
+                    },
+                ),
+            }
+        )
+        candidates.update(_optional_external_boosters(random_state))
+
+    return candidates
+
 
 def train_supervised(
     X: pd.DataFrame,
@@ -344,26 +504,53 @@ def train_supervised(
 
     best_name: Optional[str] = None
     best_search: Optional[GridSearchCV] = None
+    candidate_results: List[Dict] = []
+    failed_models: Dict[str, str] = {}
 
-    for model_name, (pipeline, param_grid) in supervised_candidates(args.random_state).items():
-        search = GridSearchCV(
-            estimator=pipeline,
-            param_grid=param_grid,
-            scoring=args.scoring,
-            cv=cv,
-            n_jobs=1,
-            refit=True,
-        )
-        search.fit(X_train, y_train)
+    candidate_map = supervised_candidates(
+        args.random_state,
+        include_advanced=not args.disable_advanced_models,
+    )
+    if args.preferred_supervised_model:
+        preferred = args.preferred_supervised_model.strip().lower()
+        if preferred not in candidate_map:
+            raise ValueError(
+                "Unknown preferred supervised model: "
+                f"{preferred}. Available: {sorted(candidate_map.keys())}"
+            )
+        candidate_map = {preferred: candidate_map[preferred]}
 
-        print(
-            f"[{model_name}] best CV {args.scoring}: "
-            f"{search.best_score_:.4f} params={search.best_params_}"
-        )
+    for model_name, (pipeline, param_grid) in candidate_map.items():
+        try:
+            search = GridSearchCV(
+                estimator=pipeline,
+                param_grid=param_grid,
+                scoring=args.scoring,
+                cv=cv,
+                n_jobs=1,
+                refit=True,
+            )
+            search.fit(X_train, y_train)
 
-        if best_search is None or search.best_score_ > best_search.best_score_:
-            best_search = search
-            best_name = model_name
+            print(
+                f"[{model_name}] best CV {args.scoring}: "
+                f"{search.best_score_:.4f} params={search.best_params_}"
+            )
+
+            candidate_results.append(
+                {
+                    "model": model_name,
+                    "best_cv_score": float(search.best_score_),
+                    "best_params": search.best_params_,
+                }
+            )
+
+            if best_search is None or search.best_score_ > best_search.best_score_:
+                best_search = search
+                best_name = model_name
+        except Exception as exc:
+            failed_models[model_name] = str(exc)
+            print(f"[{model_name}] skipped due to error: {exc}")
 
     if best_search is None or best_name is None:
         raise RuntimeError("No supervised model candidate was trained")
@@ -396,6 +583,13 @@ def train_supervised(
         "best_model": best_name,
         "best_params": best_search.best_params_,
         "best_cv_score": float(best_search.best_score_),
+        "candidate_results": candidate_results,
+        "failed_models": failed_models,
+        "preferred_supervised_model": (
+            args.preferred_supervised_model.strip().lower()
+            if args.preferred_supervised_model
+            else None
+        ),
         "classification_report": report,
         "confusion_matrix": matrix,
     }
@@ -409,9 +603,16 @@ def train_supervised(
         "feature_columns": feature_columns,
         "models": ["attack_classifier"],
         "classes": encoder.classes_.tolist(),
+        "candidate_models": [entry["model"] for entry in candidate_results],
         "best_model": best_name,
         "best_params": best_search.best_params_,
         "scoring": args.scoring,
+        "failed_models": failed_models,
+        "preferred_supervised_model": (
+            args.preferred_supervised_model.strip().lower()
+            if args.preferred_supervised_model
+            else None
+        ),
     }
 
     return metadata
