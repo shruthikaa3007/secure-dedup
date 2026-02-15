@@ -1,0 +1,64 @@
+{
+  "generated_at_utc": "2026-02-15T12:20:46.817096+00:00",
+  "dataset_path": "demo_detection_results.csv",
+  "model_dir": "unsupervised_artifacts",
+  "mode_from_metadata": "unsupervised",
+  "mode_evaluated": "unsupervised",
+  "rows_evaluated": 103,
+  "label_column": "attack_label",
+  "feature_columns": [
+    "requests_per_minute",
+    "requests_per_5_min",
+    "requests_per_hour",
+    "unique_hash_count",
+    "duplicate_ratio",
+    "pow_attempt_rate",
+    "hash_diversity",
+    "upload_to_query_ratio",
+    "inter_request_time_variance",
+    "burst_score",
+    "session_duration",
+    "cross_user_hash_overlap"
+  ],
+  "binary_metrics": {
+    "available": true,
+    "positive_class": "anomaly",
+    "confusion_matrix_labels": [
+      "normal",
+      "anomaly"
+    ],
+    "confusion_matrix": [
+      [
+        17,
+        0
+      ],
+      [
+        80,
+        6
+      ]
+    ],
+    "f1_binary": 0.13043478260869565,
+    "f1_macro": 0.21434019832189166,
+    "precision": 1.0,
+    "recall": 0.06976744186046512,
+    "pr_auc": 0.8556182735004139,
+    "truth_class_counts": {
+      "normal": 17,
+      "anomaly": 86
+    }
+  },
+  "multiclass_metrics": {
+    "available": false,
+    "reason": "Multiclass metrics are only computed for supervised classifier outputs. Use binary metrics (normal vs anomaly) for unsupervised evaluation."
+  },
+  "prediction_summary": {
+    "predicted_normal": 97,
+    "predicted_anomaly": 6,
+    "predicted_anomaly_rate": 0.05825242718446602,
+    "mean_risk_score": 0.07982740021574972,
+    "unsupervised_threshold": 0.5
+  },
+  "notes": [
+    "Unsupervised evaluation uses weighted votes from IsolationForest and OneClassSVM."
+  ]
+}
