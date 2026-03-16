@@ -12,7 +12,7 @@ For quick local demo startup, use `./run_demo.sh start`.
 ## Repository organization
 
 - **Core service code**: repository root (`app.py`, `storage.py`, `detector.py`, etc.).
-- **Deployment config**: `Dockerfile`, `.dockerignore`, `docker-compose.local.yml`, `railway.json`.
+- **Deployment config**: `Dockerfile`, `.dockerignore`, `render.yaml`.
 - **Model artifacts**: `advanced_artifacts/`, `demo_artifacts/`, `extra_trees_artifacts/`, `unsupervised_artifacts/`.
 - **Project notes & reports**: `docs/project_notes/`.
 - **Generated datasets/logs**: root CSV outputs (can be relocated per your workflow).
@@ -167,75 +167,71 @@ Adaptive PoW and reputation are enabled at runtime:
 - reputation is updated from PoW verification outcomes and policy actions.
 
 
-## Deploy in a UI cloud (Railway)
+## Deploy to Render (non-Google, free tier option)
 
-If you want a web-UI cloud deploy, use Railway.
+This project includes a production Dockerfile and a Render Blueprint (`render.yaml`) so you can deploy without Google Cloud.
 
-### Steps (UI based)
-
-1. Push this repo to GitHub.
-2. In Railway dashboard: **New Project** -> **Deploy from GitHub Repo**.
-3. Select this repository.
-4. Railway will use `Dockerfile` (and `railway.json`) automatically.
-5. Set environment variables in Railway UI:
-   - `API_KEYS=dev-api-key`
-   - `MODEL_DIR=advanced_artifacts`
-   - `STORAGE_BACKEND=filesystem`
-   - `TELEMETRY_DB=/tmp/telemetry.db`
-   - `LOCAL_CHUNK_DIR=/tmp/local_chunks`
-   - `ADAPTIVE_POW_ENABLED=true`
-   - optional: `CHUNK_ENCRYPTION_KEY=<base64 key>`
-6. Deploy and open the generated public URL.
-
-### Verify deployment
-
-```bash
-curl -fsS "https://<your-railway-domain>/health"
-```
-
-Adaptive PoW is visible through duplicate uploads and `/pow/challenge` response `adaptive_profile`.
-
-## Run with Docker locally
+> Free tier note: Render free web services are available in many accounts/periods, but availability and limits can change by Render policy. This repo is configured to run on Render free plan when that tier is available.
 
 ### Prerequisites
 
-- Docker + Docker Compose
-- Python virtualenv with project dependencies installed
+- A Render account.
+- A connected Git repository.
 
-### Start everything
+### Quick deploy (Blueprint)
+
+1. Push this repo to GitHub/GitLab.
+2. In Render, choose **New +** -> **Blueprint**.
+3. Select this repository; Render reads `render.yaml` and provisions `secure-dedup`.
+4. (Optional) set `CHUNK_ENCRYPTION_KEY` in Render environment variables for encrypted chunk storage.
+
+### Runtime defaults used on Render
+
+- `STORAGE_BACKEND=filesystem`
+- `MODEL_DIR=advanced_artifacts`
+- `TELEMETRY_DB=/var/data/telemetry.db`
+- `LOCAL_CHUNK_DIR=/var/data/local_chunks`
+
+A persistent disk is mounted at `/var/data`, so chunk/data state survives restarts.
+
+
+### Show adaptive PoW on Render
+
+After deploy, you can verify adaptive PoW is active:
 
 ```bash
-./run_demo.sh start
-```
-
-This starts Redis + LocalStack (if Docker is available) and then runs the API with adaptive PoW enabled by default.
-
-### Show adaptive PoW locally
-
-```bash
-BASE_URL="http://127.0.0.1:8000"
+BASE_URL="https://<your-render-service>.onrender.com"
 API_KEY="dev-api-key"
 CLIENT_ID="demo-client"
 
-# 1) Upload once
-curl -fsS -X POST "$BASE_URL/upload"   -H "X-API-Key: $API_KEY"   -H "X-Client-ID: $CLIENT_ID"   -F "file=@sample.bin"
+# 1) Upload a file once (stores chunks)
+curl -fsS -X POST "$BASE_URL/upload" \
+  -H "X-API-Key: $API_KEY" \
+  -H "X-Client-ID: $CLIENT_ID" \
+  -F "file=@sample.bin"
 
-# 2) Upload same file again (duplicate path)
-curl -sS -X POST "$BASE_URL/upload"   -H "X-API-Key: $API_KEY"   -H "X-Client-ID: $CLIENT_ID"   -F "file=@sample.bin"
+# 2) Upload same file again (duplicate) to trigger PoW challenge requirement
+curl -sS -X POST "$BASE_URL/upload" \
+  -H "X-API-Key: $API_KEY" \
+  -H "X-Client-ID: $CLIENT_ID" \
+  -F "file=@sample.bin"
 
-# 3) Request challenge directly for one duplicate chunk hash
+# 3) Request an explicit challenge
 CHUNK_HASH="<chunk-hash-from-file_recipe>"
-curl -fsS -X POST "$BASE_URL/pow/challenge"   -H "Content-Type: application/json"   -H "X-API-Key: $API_KEY"   -H "X-Client-ID: $CLIENT_ID"   -d "{"chunk_hash":"$CHUNK_HASH"}"
+curl -fsS -X POST "$BASE_URL/pow/challenge" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $API_KEY" \
+  -H "X-Client-ID: $CLIENT_ID" \
+  -d "{"chunk_hash":"$CHUNK_HASH"}"
 ```
 
-Inspect `challenge.adaptive_profile` to confirm adaptive PoW difficulty is active.
+In challenge responses, inspect `adaptive_profile` (`difficulty_level`, `difficulty_score`, `risk_score`, `reputation_score`) to confirm adaptive PoW decisions are active on Render.
 
-### Smoke test
+### Post-deploy smoke test
 
 ```bash
-./run_demo.sh test
+curl -fsS "https://<your-render-service>.onrender.com/health"
 ```
-
 
 ## Base-paper alignment upgrades
 
@@ -320,7 +316,7 @@ This project now implements an end-to-end secure dedup pipeline that is close to
    - reputation-aware adaptive PoW difficulty
 
 6. **Cloud deployment path**
-   - Dockerfile + local Docker Compose stack (`run_demo.sh`)
+   - Dockerfile + Render Blueprint for non-Google free-tier-friendly hosting
 
 In practice, users should expect:
 - first upload stores new encrypted chunks (if encryption key configured),
