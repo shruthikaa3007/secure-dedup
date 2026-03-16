@@ -200,6 +200,11 @@ def _parse_pow_proofs(raw: Optional[str]) -> Dict[str, Dict[str, str]]:
     return parsed
 
 
+@app.get("/")
+def root():
+    return {"status": "ok", "service": "secure-dedup"}
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
