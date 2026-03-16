@@ -33,7 +33,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", default="demo_detection_results.csv")
     parser.add_argument("--output-details", default="pow_comparison_details.csv")
     parser.add_argument("--output-summary", default="pow_comparison_summary.json")
-    parser.add_argument("--output-md", default="pow_comparison_report.md")
+    parser.add_argument("--output-md", default="docs/project_notes/pow_comparison_report.md")
     parser.add_argument(
         "--chunk-length",
         type=int,
