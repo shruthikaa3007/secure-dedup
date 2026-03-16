@@ -6,12 +6,16 @@ import time
 import uuid
 from typing import Dict, Optional
 
+from db_utils import resolve_db_file
+
 from dedup_index import chunk_exists
 from pow import compute_proof
 from storage import get_chunk
 
-DB_FILE = os.getenv("TELEMETRY_DB", "telemetry.db")
+DB_FILE = resolve_db_file(os.getenv("TELEMETRY_DB", "telemetry.db"))
 AUDIT_CHALLENGE_TTL_SEC = int(os.getenv("AUDIT_CHALLENGE_TTL_SEC", "300"))
+
+
 
 
 def _connect():

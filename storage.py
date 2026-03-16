@@ -32,6 +32,23 @@ BUCKET = os.getenv("S3_BUCKET", os.getenv("MINIO_BUCKET", "chunks"))
 
 _LOCAL_STORE_DIR = Path(os.getenv("LOCAL_CHUNK_DIR", "local_chunks"))
 
+
+def _init_local_store_dir() -> Path:
+    preferred = _LOCAL_STORE_DIR
+    fallback = Path("/tmp/local_chunks")
+
+    for candidate in (preferred, fallback):
+        try:
+            candidate.mkdir(parents=True, exist_ok=True)
+            return candidate
+        except OSError:
+            continue
+
+    # Last-resort fallback to repository-relative path.
+    final_fallback = Path("local_chunks")
+    final_fallback.mkdir(parents=True, exist_ok=True)
+    return final_fallback
+
 _s3_client = None
 if STORAGE_BACKEND in {"auto", "localstack", "s3"} and boto3 is not None:
     try:
@@ -68,7 +85,7 @@ if _s3_client is None and STORAGE_BACKEND in {"auto", "minio"} and Minio is not 
         _minio_client = None
 
 if _s3_client is None and _minio_client is None:
-    _LOCAL_STORE_DIR.mkdir(parents=True, exist_ok=True)
+    _LOCAL_STORE_DIR = _init_local_store_dir()
 
 
 def upload_chunk(chunk_hash: str, data: bytes):

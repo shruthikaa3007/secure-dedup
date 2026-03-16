@@ -3,7 +3,9 @@ import sqlite3
 import time
 from typing import Dict, List
 
-DB_FILE = os.getenv("TELEMETRY_DB", "telemetry.db")
+from db_utils import resolve_db_file
+
+DB_FILE = resolve_db_file(os.getenv("TELEMETRY_DB", "telemetry.db"))
 
 
 def _connect():
