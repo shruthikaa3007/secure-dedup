@@ -157,6 +157,193 @@ Adaptive PoW and reputation are enabled at runtime:
 - difficulty selection uses detector-derived risk and client reputation,
 - reputation is updated from PoW verification outcomes and policy actions.
 
+
+## Deploy to Render (non-Google, free tier option)
+
+This project includes a production Dockerfile and a Render Blueprint (`render.yaml`) so you can deploy without Google Cloud.
+
+> Free tier note: Render free web services are available in many accounts/periods, but availability and limits can change by Render policy. This repo is configured to run on Render free plan when that tier is available.
+
+### Prerequisites
+
+- A Render account.
+- A connected Git repository.
+
+### Quick deploy (Blueprint)
+
+1. Push this repo to GitHub/GitLab.
+2. In Render, choose **New +** -> **Blueprint**.
+3. Select this repository; Render reads `render.yaml` and provisions `secure-dedup`.
+4. (Optional) set `CHUNK_ENCRYPTION_KEY` in Render environment variables for encrypted chunk storage.
+
+### Runtime defaults used on Render
+
+- `STORAGE_BACKEND=filesystem`
+- `MODEL_DIR=advanced_artifacts`
+- `TELEMETRY_DB=/var/data/telemetry.db`
+- `LOCAL_CHUNK_DIR=/var/data/local_chunks`
+
+A persistent disk is mounted at `/var/data`, so chunk/data state survives restarts.
+
+
+### Show adaptive PoW on Render
+
+After deploy, you can verify adaptive PoW is active:
+
+```bash
+BASE_URL="https://<your-render-service>.onrender.com"
+API_KEY="dev-api-key"
+CLIENT_ID="demo-client"
+
+# 1) Upload a file once (stores chunks)
+curl -fsS -X POST "$BASE_URL/upload" \
+  -H "X-API-Key: $API_KEY" \
+  -H "X-Client-ID: $CLIENT_ID" \
+  -F "file=@sample.bin"
+
+# 2) Upload same file again (duplicate) to trigger PoW challenge requirement
+curl -sS -X POST "$BASE_URL/upload" \
+  -H "X-API-Key: $API_KEY" \
+  -H "X-Client-ID: $CLIENT_ID" \
+  -F "file=@sample.bin"
+
+# 3) Request an explicit challenge
+CHUNK_HASH="<chunk-hash-from-file_recipe>"
+curl -fsS -X POST "$BASE_URL/pow/challenge" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $API_KEY" \
+  -H "X-Client-ID: $CLIENT_ID" \
+  -d "{"chunk_hash":"$CHUNK_HASH"}"
+```
+
+In challenge responses, inspect `adaptive_profile` (`difficulty_level`, `difficulty_score`, `risk_score`, `reputation_score`) to confirm adaptive PoW decisions are active on Render.
+
+### Post-deploy smoke test
+
+```bash
+curl -fsS "https://<your-render-service>.onrender.com/health"
+```
+
+## Base-paper alignment upgrades
+
+This implementation now aligns more closely with the selected base paper by adding:
+
+- **Dynamic ownership management**
+  - persistent per-chunk owner sets and ownership events (`grant` / `revoke` / `transfer`)
+  - endpoints: `GET /ownership/{chunk_hash}`, `POST /ownership/transfer`
+
+- **Data dynamics (versioned file recipes)**
+  - each upload creates a versioned file record (`file_id`, `version`, `status`)
+  - upload with `file_id` updates that file with a new recipe version
+  - delete endpoint creates a tombstone version and decrements chunk ref-counts
+  - endpoints: `GET /files`, `GET /files/{file_id}`, `DELETE /files/{file_id}`
+
+- **Cloud auditing protocol**
+  - challenge/verify audit flow for chunk integrity checks
+  - quick audit endpoint for on-demand hash evidence
+  - endpoints: `POST /audit/challenge`, `POST /audit/verify`, `GET /audit/quick/{chunk_hash}`
+
+Upload endpoint update:
+- `POST /upload` now accepts optional form field `file_id` to create a new version for an existing file.
+
+
+## Encryption at rest for stored chunks
+
+Chunk payload encryption is now supported via AES-GCM before writing to the storage backend (filesystem / LocalStack S3 / MinIO / S3).
+
+- Set `CHUNK_ENCRYPTION_KEY` to a base64-encoded AES key (16/24/32 bytes).
+- Encryption is **content-bound**: a per-chunk key is derived from the master key + `chunk_hash` context (HMAC-SHA256 based derivation).
+- Encryption is **segment-based (not chunk all-or-nothing)**: each chunk is split into independently encrypted segments.
+- AES-GCM AAD includes `chunk_hash` plus segment index, cryptographically binding each encrypted segment to chunk identity and position.
+- If the key is not set, storage behaves as plaintext (backward-compatible default).
+- Encrypted payloads are stored with an internal envelope prefix and authenticated tags per segment.
+- Optional strict mode (`CHUNK_ENCRYPTION_STRICT=true`) rejects plaintext legacy chunks when encryption is enabled.
+
+Generate a key:
+
+```bash
+python generate_encryption_key.py
+```
+
+Example runtime config:
+
+```bash
+export CHUNK_ENCRYPTION_KEY="<base64-32-byte-key>"
+```
+
+
+## What happens if two files are similar but slightly different?
+
+The system deduplicates at chunk level (content-defined chunking), not whole-file level.
+
+- Shared chunk bytes across the two files produce identical chunk hashes and are **reused** (deduplicated).
+- Modified regions tend to create different chunk boundaries/hashes locally and are stored as **new chunks**.
+- Result: partial deduplication. Highly similar files share most chunks; only changed segments consume extra storage.
+
+File records keep separate versioned recipes per file, so both files can coexist while still sharing duplicate chunks safely.
+
+## Final project implementation: what to expect
+
+This project now implements an end-to-end secure dedup pipeline that is close to the selected base paper while preserving your adaptive defense extension:
+
+1. **Secure dedup core**
+   - content-defined chunking + hash-based dedup index + chunk reference counting
+   - proof-of-ownership challenge/verify flow on duplicate chunks
+
+2. **Dynamic ownership management**
+   - persistent owner sets per chunk
+   - ownership events (`grant`, `revoke`, `transfer`) and transfer API
+
+3. **Data dynamics (file lifecycle)**
+   - versioned file recipes (`file_id`, `version`, `status`)
+   - create/update/delete semantics with chunk ref-count reconciliation
+
+4. **Cloud auditing protocol**
+   - challenge/verify integrity audits for stored chunks
+   - quick integrity probe endpoint for on-demand evidence
+
+5. **Adaptive security extension (your novelty)**
+   - behavioral anomaly/risk scoring and policy actions
+   - reputation-aware adaptive PoW difficulty
+
+6. **Cloud deployment path**
+   - Dockerfile + Render Blueprint for non-Google free-tier-friendly hosting
+
+In practice, users should expect:
+- first upload stores new encrypted chunks (if encryption key configured),
+- duplicate uploads require ownership proof,
+- file updates create a new version and retire unreferenced old chunks,
+- owners can audit chunk integrity and transfer ownership,
+- suspicious clients are automatically rate-limited/blocked by policy.
+
+
+## Runtime metrics and test graphs
+
+### Runtime metrics endpoint
+
+The API now exposes:
+
+- `GET /metrics`
+
+It returns a lightweight snapshot including request volume, feature snapshot count, file-version count, ownership links/events, and audit challenge/event counts.
+
+### Generate benchmark metrics + graphs
+
+Run:
+
+```bash
+python generate_test_metrics_graphs.py --output-dir metrics_artifacts
+```
+
+Artifacts generated:
+- `metrics_artifacts/test_metrics.csv`
+- `metrics_artifacts/summary.json`
+- `metrics_artifacts/dedup_ratio_by_case.png` **or** `.svg`
+- `metrics_artifacts/shared_vs_new_chunks.png` **or** `.svg`
+- `metrics_artifacts/processing_time_ms.png` **or** `.svg`
+
+These are based on synthetic similarity/mutation test cases and are useful to show dedup efficiency and processing behavior.
+
 ## Runtime configuration
 
 Storage backend can be configured with:
@@ -213,6 +400,11 @@ Durable telemetry:
 
 Model artifact path:
 - `MODEL_DIR` (default `.`). Set this to use alternate trained artifacts (for example `advanced_artifacts`).
+
+Encryption:
+- `CHUNK_ENCRYPTION_KEY` (optional; base64 AES key with 16/24/32 decoded bytes).
+- `CHUNK_ENCRYPTION_STRICT` (`true`/`false`, default `false`) fail reads when encryption is enabled but payload is plaintext/legacy format.
+- `CHUNK_ENCRYPTION_SEGMENT_SIZE` (default `4096`) segment size in bytes for segment-based encryption (must be >= 256).
 
 ## Dataset adapters
 
