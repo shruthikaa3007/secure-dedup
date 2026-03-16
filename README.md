@@ -245,6 +245,8 @@ curl -fsS "https://<your-railway-domain>/health"
 
 If your logs include `PermissionError: [Errno 13]` for `/var/data/local_chunks`, set `LOCAL_CHUNK_DIR=/tmp/local_chunks` and redeploy.
 
+If your logs include `sqlite3.OperationalError: unable to open database file`, set `TELEMETRY_DB=/tmp/telemetry.db` and redeploy.
+
 If this still fails in your Railway workspace, use Render UI flow below (same Docker image).
 
 ## Alternative easy UI cloud: Render Web Service
