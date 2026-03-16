@@ -12,7 +12,7 @@ For quick local demo startup, use `./run_demo.sh start`.
 ## Repository organization
 
 - **Core service code**: repository root (`app.py`, `storage.py`, `detector.py`, etc.).
-- **Deployment config**: `Dockerfile`, `.dockerignore`, `docker-compose.local.yml`.
+- **Deployment config**: `Dockerfile`, `.dockerignore`, `docker-compose.local.yml`, `railway.json`.
 - **Model artifacts**: `advanced_artifacts/`, `demo_artifacts/`, `extra_trees_artifacts/`, `unsupervised_artifacts/`.
 - **Project notes & reports**: `docs/project_notes/`.
 - **Generated datasets/logs**: root CSV outputs (can be relocated per your workflow).
@@ -166,6 +166,34 @@ Adaptive PoW and reputation are enabled at runtime:
 - difficulty selection uses detector-derived risk and client reputation,
 - reputation is updated from PoW verification outcomes and policy actions.
 
+
+## Deploy in a UI cloud (Railway)
+
+If you want a web-UI cloud deploy, use Railway.
+
+### Steps (UI based)
+
+1. Push this repo to GitHub.
+2. In Railway dashboard: **New Project** -> **Deploy from GitHub Repo**.
+3. Select this repository.
+4. Railway will use `Dockerfile` (and `railway.json`) automatically.
+5. Set environment variables in Railway UI:
+   - `API_KEYS=dev-api-key`
+   - `MODEL_DIR=advanced_artifacts`
+   - `STORAGE_BACKEND=filesystem`
+   - `TELEMETRY_DB=/tmp/telemetry.db`
+   - `LOCAL_CHUNK_DIR=/tmp/local_chunks`
+   - `ADAPTIVE_POW_ENABLED=true`
+   - optional: `CHUNK_ENCRYPTION_KEY=<base64 key>`
+6. Deploy and open the generated public URL.
+
+### Verify deployment
+
+```bash
+curl -fsS "https://<your-railway-domain>/health"
+```
+
+Adaptive PoW is visible through duplicate uploads and `/pow/challenge` response `adaptive_profile`.
 
 ## Run with Docker locally
 
