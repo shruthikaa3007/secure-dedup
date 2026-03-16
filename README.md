@@ -176,7 +176,7 @@ If you want a web-UI cloud deploy, use Railway.
 1. Push this repo to GitHub.
 2. In Railway dashboard: **New Project** -> **Deploy from GitHub Repo**.
 3. Select this repository.
-4. Railway will use `Dockerfile` (and `railway.json`) automatically.
+4. Railway will use `Dockerfile` for build/run; `railway.json` sets health check and restart policy.
 5. Set environment variables in Railway UI:
    - `API_KEYS=dev-api-key`
    - `MODEL_DIR=advanced_artifacts`
@@ -190,26 +190,46 @@ If you want a web-UI cloud deploy, use Railway.
 ### Verify deployment
 
 ```bash
-curl -fsS "https://<your-railway-domain>/health"
+curl -fsS "https://<your-railway-domain>/"
 ```
 
 Adaptive PoW is visible through duplicate uploads and `/pow/challenge` response `adaptive_profile`.
 
 
-### If Railway shows healthcheck failure
+### If Railway shows healthcheck failure (concrete fix)
 
-Common cause: `$PORT` not being expanded correctly in a custom start command.
 
-This repo sets:
-- `healthcheckPath=/health`
-- start command via shell expansion in `railway.json`:
-  - `sh -c 'uvicorn app:app --host 0.0.0.0 --port ${PORT:-8080}'`
+### If Railway says `Failed to parse JSON file railway.json`
 
-In Railway UI, do this:
-1. Ensure service is using the repository `railway.json` (or copy the same start command in UI).
-2. Remove any conflicting custom start command in UI that hardcodes a wrong port.
-3. Redeploy and check logs for `Uvicorn running on http://0.0.0.0:<port>`.
+Use this exact validation command before pushing:
 
+```bash
+python -m json.tool railway.json
+```
+
+If it fails, replace `railway.json` with the current repository version (strict JSON with double-quoted keys).
+
+
+Use this exact setup:
+
+1. In Railway **Settings -> Healthcheck Path**, set it to `/` (root).
+2. In Railway **Settings -> Start Command**, leave it empty (use Dockerfile `CMD`).
+3. Ensure these env vars exist:
+   - `API_KEYS=dev-api-key`
+   - `MODEL_DIR=advanced_artifacts`
+   - `STORAGE_BACKEND=filesystem`
+   - `TELEMETRY_DB=/tmp/telemetry.db`
+   - `LOCAL_CHUNK_DIR=/tmp/local_chunks`
+4. Redeploy from latest commit.
+5. Check logs for a line like: `Uvicorn running on http://0.0.0.0:<port>`.
+6. Verify both endpoints:
+
+```bash
+curl -fsS "https://<your-railway-domain>/"
+curl -fsS "https://<your-railway-domain>/health"
+```
+
+If this still fails in your Railway workspace, use Render UI flow below (same Docker image).
 
 ## Alternative easy UI cloud: Render Web Service
 
@@ -231,6 +251,18 @@ If Railway health checks still fail in your account/project, use Render (Web Ser
 ```bash
 curl -fsS "https://<your-render-service>.onrender.com/health"
 ```
+
+## Concrete deployment checklist (works path)
+
+Use this exact order:
+
+1. Confirm `Dockerfile` exists and unchanged.
+2. Push latest commit to GitHub.
+3. Connect repo in Railway UI.
+4. Set env vars exactly as documented.
+5. Keep Start Command empty in UI (use Dockerfile CMD).
+6. Set Healthcheck path to `/`.
+7. Deploy and verify `/` and `/health`.
 
 ## Run with Docker locally
 
