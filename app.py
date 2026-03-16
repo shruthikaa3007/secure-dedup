@@ -4,7 +4,8 @@ import time
 from collections import Counter
 from typing import Dict, Optional
 
-from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Security, UploadFile
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 
 from audit_store import create_audit_challenge, quick_audit, verify_audit_challenge
@@ -36,6 +37,12 @@ from reputation import (
 from storage import delete_chunk, get_chunk, upload_chunk
 
 app = FastAPI()
+
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+def _require_api_key(api_key: Optional[str] = Security(_api_key_header)) -> str:
+    return validate_api_key(api_key)
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -268,10 +275,9 @@ def demo_status(limit: int = 20):
 @app.post("/pow/challenge")
 def create_pow_challenge(
     request: PowChallengeRequest,
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    api_key: str = Depends(_require_api_key),
     x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
 ):
-    api_key = validate_api_key(x_api_key)
     client_id = resolve_client_id(x_client_id, request.chunk_hash, api_key)
 
     if not chunk_exists(request.chunk_hash):
@@ -300,10 +306,9 @@ def create_pow_challenge(
 @app.post("/pow/verify")
 def verify_pow(
     request: PowVerifyRequest,
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    api_key: str = Depends(_require_api_key),
     x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
 ):
-    api_key = validate_api_key(x_api_key)
     client_id = resolve_client_id(x_client_id, request.chunk_hash, api_key)
 
     if not chunk_exists(request.chunk_hash):
@@ -350,10 +355,9 @@ async def upload_file(
     file: UploadFile = File(...),
     pow_proofs_json: Optional[str] = Form(default=None),
     file_id: Optional[str] = Form(default=None),
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    api_key: str = Depends(_require_api_key),
     x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
 ):
-    api_key = validate_api_key(x_api_key)
     client_id = resolve_client_id(x_client_id, file.filename, api_key)
     _enforce_pre_request_policy(client_id)
 
@@ -545,10 +549,9 @@ async def upload_file(
 
 @app.get("/files")
 def get_my_files(
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    api_key: str = Depends(_require_api_key),
     x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
 ):
-    api_key = validate_api_key(x_api_key)
     client_id = resolve_client_id(x_client_id, "files", api_key)
     return {"client_id": client_id, "files": list_files(client_id)}
 
@@ -556,10 +559,9 @@ def get_my_files(
 @app.get("/files/{file_id}")
 def get_file_by_id(
     file_id: str,
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    api_key: str = Depends(_require_api_key),
     x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
 ):
-    api_key = validate_api_key(x_api_key)
     client_id = resolve_client_id(x_client_id, file_id, api_key)
     try:
         record = get_file(file_id)
@@ -573,10 +575,9 @@ def get_file_by_id(
 @app.delete("/files/{file_id}")
 def delete_file_by_id(
     file_id: str,
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    api_key: str = Depends(_require_api_key),
     x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
 ):
-    api_key = validate_api_key(x_api_key)
     client_id = resolve_client_id(x_client_id, file_id, api_key)
     try:
         record = delete_file(file_id, client_id)
@@ -597,10 +598,9 @@ def delete_file_by_id(
 @app.get("/ownership/{chunk_hash}")
 def get_chunk_ownership(
     chunk_hash: str,
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    api_key: str = Depends(_require_api_key),
     x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
 ):
-    api_key = validate_api_key(x_api_key)
     client_id = resolve_client_id(x_client_id, chunk_hash, api_key)
     if not is_owner(chunk_hash, client_id):
         raise HTTPException(status_code=403, detail={"error": "Not an owner", "chunk_hash": chunk_hash})
@@ -610,10 +610,9 @@ def get_chunk_ownership(
 @app.post("/ownership/transfer")
 def transfer_chunk_ownership(
     request: OwnershipTransferRequest,
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    api_key: str = Depends(_require_api_key),
     x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
 ):
-    api_key = validate_api_key(x_api_key)
     client_id = resolve_client_id(x_client_id, request.chunk_hash, api_key)
     if not is_owner(request.chunk_hash, client_id):
         raise HTTPException(status_code=403, detail={"error": "Only owner can transfer", "chunk_hash": request.chunk_hash})
@@ -625,10 +624,9 @@ def transfer_chunk_ownership(
 @app.post("/audit/challenge")
 def create_chunk_audit(
     request: AuditChallengeRequest,
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    api_key: str = Depends(_require_api_key),
     x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
 ):
-    api_key = validate_api_key(x_api_key)
     client_id = resolve_client_id(x_client_id, request.chunk_hash, api_key)
     if not is_owner(request.chunk_hash, client_id):
         raise HTTPException(status_code=403, detail={"error": "Only owners can audit", "chunk_hash": request.chunk_hash})
@@ -643,9 +641,9 @@ def create_chunk_audit(
 @app.post("/audit/verify")
 def verify_chunk_audit(
     request: AuditVerifyRequest,
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    api_key: str = Depends(_require_api_key),
 ):
-    validate_api_key(x_api_key)
+    _ = api_key
     try:
         result = verify_audit_challenge(request.challenge_id, request.proof)
     except KeyError:
@@ -656,10 +654,9 @@ def verify_chunk_audit(
 @app.get("/audit/quick/{chunk_hash}")
 def quick_chunk_audit(
     chunk_hash: str,
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    api_key: str = Depends(_require_api_key),
     x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
 ):
-    api_key = validate_api_key(x_api_key)
     client_id = resolve_client_id(x_client_id, chunk_hash, api_key)
     if not is_owner(chunk_hash, client_id):
         raise HTTPException(status_code=403, detail={"error": "Only owners can audit", "chunk_hash": chunk_hash})

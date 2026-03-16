@@ -206,6 +206,8 @@ curl -fsS "https://<your-railway-domain>/demo/status?limit=20" | python -m json.
 
 Adaptive PoW is visible through duplicate uploads and `/pow/challenge` response `adaptive_profile`.
 
+Swagger UI tip: open `https://<your-railway-domain>/docs`, click **Authorize**, and enter your `X-API-Key` (for example `dev-api-key`) before trying protected routes like `/upload`.
+
 
 ### If Railway shows healthcheck failure (concrete fix)
 
