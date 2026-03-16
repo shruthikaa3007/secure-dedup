@@ -176,7 +176,7 @@ If you want a web-UI cloud deploy, use Railway.
 1. Push this repo to GitHub.
 2. In Railway dashboard: **New Project** -> **Deploy from GitHub Repo**.
 3. Select this repository.
-4. Railway will use `Dockerfile` for build/run; `railway.json` sets health check and restart policy.
+4. Railway will use `Dockerfile` for build/run; `railway.json` starts `python start_server.py` explicitly.
 5. Set environment variables in Railway UI:
    - `API_KEYS=dev-api-key`
    - `MODEL_DIR=advanced_artifacts`
@@ -186,6 +186,11 @@ If you want a web-UI cloud deploy, use Railway.
    - `ADAPTIVE_POW_ENABLED=true`
    - optional: `CHUNK_ENCRYPTION_KEY=<base64 key>`
 6. Deploy and open the generated public URL.
+
+Defaults baked into Docker image:
+- `STORAGE_BACKEND=filesystem`
+- `TELEMETRY_DB=/tmp/telemetry.db`
+- `LOCAL_CHUNK_DIR=/tmp/local_chunks`
 
 ### Verify deployment
 
@@ -213,7 +218,7 @@ If it fails, replace `railway.json` with the current repository version (strict 
 Use this exact setup:
 
 1. In Railway **Settings -> Healthcheck Path**, set it to `/` (root).
-2. In Railway **Settings -> Start Command**, leave it empty (use Dockerfile `CMD`).
+2. In Railway **Settings -> Start Command**, set `python start_server.py` (or keep repo `railway.json` command).
 3. Ensure these env vars exist:
    - `API_KEYS=dev-api-key`
    - `MODEL_DIR=advanced_artifacts`
@@ -221,8 +226,9 @@ Use this exact setup:
    - `TELEMETRY_DB=/tmp/telemetry.db`
    - `LOCAL_CHUNK_DIR=/tmp/local_chunks`
 4. Redeploy from latest commit.
-5. Check logs for a line like: `Uvicorn running on http://0.0.0.0:<port>`.
-6. Verify both endpoints:
+5. In Railway **Deployments -> Logs**, confirm process starts and binds to a port.
+6. Check logs for a line like: `Uvicorn running on http://0.0.0.0:<port>`.
+7. Verify both endpoints:
 
 ```bash
 curl -fsS "https://<your-railway-domain>/"
@@ -260,8 +266,8 @@ Use this exact order:
 2. Push latest commit to GitHub.
 3. Connect repo in Railway UI.
 4. Set env vars exactly as documented.
-5. Keep Start Command empty in UI (use Dockerfile CMD).
-6. Set Healthcheck path to `/`.
+5. Set Start Command to `python start_server.py` (or keep repo `railway.json`).
+6. Set Healthcheck path to `/health` (or `/` if required by platform behavior).
 7. Deploy and verify `/` and `/health`.
 
 ## Run with Docker locally
