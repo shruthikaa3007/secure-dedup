@@ -1,5 +1,5 @@
 {
-  "$schema": "https://railway.app/railway.schema.json",
+  "$schema": "https://railway.app/railway.schema.json",https://github.com/shruthikaa3007/secure-dedup/pull/7/conflict?name=README.md&ancestor_oid=a121c512b7ca9baa0a4bc7a054e1014c856315b5&base_oid=b4481edbfbc79a0ce58003a9f9f07bac33ef47f5&head_oid=39a38a560366943ddc0120df3b501b716754fcaf
   "build": {
     "builder": "DOCKERFILE"
   },
