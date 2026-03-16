@@ -208,6 +208,12 @@ Adaptive PoW is visible through duplicate uploads and `/pow/challenge` response 
 
 Swagger UI tip: open `https://<your-railway-domain>/docs`, click **Authorize**, and enter your `X-API-Key` (for example `dev-api-key`) before trying protected routes like `/upload`.
 
+Upload demo flow in UI (to avoid PoW form errors):
+1. First upload: leave `pow_proofs_json` empty (or set `{}`), then execute `/upload`.
+2. Upload same file again: you will get `409` with `required_challenges` for duplicate chunks.
+3. Call `/pow/verify` (or provide valid `pow_proofs_json`) and retry `/upload`.
+4. Use `/demo/status` to show recent upload + PoW events live.
+
 
 ### If Railway shows healthcheck failure (concrete fix)
 

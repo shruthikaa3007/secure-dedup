@@ -182,13 +182,20 @@ def _enforce_pre_request_policy(client_id: str) -> None:
 
 
 def _parse_pow_proofs(raw: Optional[str]) -> Dict[str, Dict[str, str]]:
-    if not raw:
+    normalized = (raw or "").strip()
+    if not normalized or normalized.lower() == "string":
         return {}
 
     try:
-        data = json.loads(raw)
+        data = json.loads(normalized)
     except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=400, detail={"error": f"Invalid pow_proofs_json: {exc}"})
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": f"Invalid pow_proofs_json: {exc}",
+                "hint": "Leave pow_proofs_json empty for first upload, or send valid JSON like {}",
+            },
+        )
 
     if not isinstance(data, dict):
         raise HTTPException(status_code=400, detail={"error": "pow_proofs_json must be an object"})
@@ -353,7 +360,13 @@ def verify_pow(
 @app.post("/upload")
 async def upload_file(
     file: UploadFile = File(...),
-    pow_proofs_json: Optional[str] = Form(default=None),
+    pow_proofs_json: Optional[str] = Form(
+        default=None,
+        description=(
+            "Optional JSON map of duplicate chunk proofs. "
+            "Leave empty for first upload. Example: {\"<chunk_hash>\": {\"challenge_id\": \"...\", \"proof\": \"...\"}}"
+        ),
+    ),
     file_id: Optional[str] = Form(default=None),
     api_key: str = Depends(_require_api_key),
     x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
