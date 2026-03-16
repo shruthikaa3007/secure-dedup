@@ -198,6 +198,12 @@ Defaults baked into Docker image:
 curl -fsS "https://<your-railway-domain>/"
 ```
 
+For a demo-friendly runtime snapshot (recent events, active client policies, and reputation):
+
+```bash
+curl -fsS "https://<your-railway-domain>/demo/status?limit=20" | python -m json.tool
+```
+
 Adaptive PoW is visible through duplicate uploads and `/pow/challenge` response `adaptive_profile`.
 
 
@@ -218,22 +224,26 @@ If it fails, replace `railway.json` with the current repository version (strict 
 Use this exact setup:
 
 1. In Railway **Settings -> Healthcheck Path**, set it to `/` (root).
-2. In Railway **Settings -> Start Command**, set `python start_server.py` (or keep repo `railway.json` command).
-3. Ensure these env vars exist:
+
+2. Keep `/health` for automated probes, and use `/demo/status` during demos to show what the service is doing in near real time.
+3. In Railway **Settings -> Start Command**, set `python start_server.py` (or keep repo `railway.json` command).
+4. Ensure these env vars exist:
    - `API_KEYS=dev-api-key`
    - `MODEL_DIR=advanced_artifacts`
    - `STORAGE_BACKEND=filesystem`
    - `TELEMETRY_DB=/tmp/telemetry.db`
    - `LOCAL_CHUNK_DIR=/tmp/local_chunks`
-4. Redeploy from latest commit.
-5. In Railway **Deployments -> Logs**, confirm process starts and binds to a port.
-6. Check logs for a line like: `Uvicorn running on http://0.0.0.0:<port>`.
-7. Verify both endpoints:
+5. Redeploy from latest commit.
+6. In Railway **Deployments -> Logs**, confirm process starts and binds to a port.
+7. Check logs for a line like: `Uvicorn running on http://0.0.0.0:<port>`.
+8. Verify both endpoints:
 
 ```bash
 curl -fsS "https://<your-railway-domain>/"
 curl -fsS "https://<your-railway-domain>/health"
 ```
+
+If your logs include `PermissionError: [Errno 13]` for `/var/data/local_chunks`, set `LOCAL_CHUNK_DIR=/tmp/local_chunks` and redeploy.
 
 If this still fails in your Railway workspace, use Render UI flow below (same Docker image).
 

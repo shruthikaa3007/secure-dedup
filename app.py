@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from collections import Counter
 from typing import Dict, Optional
 
@@ -213,6 +214,55 @@ def health():
 @app.get("/metrics")
 def metrics():
     return {"status": "ok", "metrics": runtime_metrics_snapshot()}
+
+
+@app.get("/demo/status")
+def demo_status(limit: int = 20):
+    bounded_limit = max(1, min(100, int(limit)))
+
+    clients = []
+    events = []
+    for client_id, history in REQUEST_LOGS.items():
+        if not history:
+            continue
+        latest_event = history[-1]
+        clients.append(
+            {
+                "client_id": client_id,
+                "request_count": len(history),
+                "last_event_ts": latest_event.get("timestamp"),
+                "active_policy": get_active_policy_action(client_id),
+                "reputation": get_reputation(client_id),
+            }
+        )
+        for item in list(history)[-bounded_limit:]:
+            events.append(
+                {
+                    "client_id": client_id,
+                    "timestamp": item.get("timestamp"),
+                    "operation_type": item.get("operation_type"),
+                    "chunk_hash": item.get("chunk_hash"),
+                    "pow_result": item.get("pow_result"),
+                }
+            )
+
+    clients.sort(key=lambda item: item.get("last_event_ts") or 0.0, reverse=True)
+    events.sort(key=lambda item: item.get("timestamp") or 0.0, reverse=True)
+
+    return {
+        "status": "ok",
+        "service": "secure-dedup",
+        "server_time": time.time(),
+        "summary": {
+            "active_clients": len(clients),
+            "total_buffered_events": sum(len(history) for history in REQUEST_LOGS.values()),
+            "recent_operation_types": Counter(
+                event["operation_type"] for event in events if event.get("operation_type")
+            ),
+        },
+        "clients": clients[:bounded_limit],
+        "recent_events": events[:bounded_limit],
+    }
 
 
 @app.post("/pow/challenge")
