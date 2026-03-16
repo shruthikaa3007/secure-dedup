@@ -5,8 +5,10 @@ import sqlite3
 import time
 from typing import Dict, Optional
 
+from db_utils import resolve_db_file
+
 FILE = "detection_results.csv"
-DB_FILE = os.getenv("TELEMETRY_DB", "telemetry.db")
+DB_FILE = resolve_db_file(os.getenv("TELEMETRY_DB", "telemetry.db"))
 
 
 def _ensure_feature_table() -> None:
