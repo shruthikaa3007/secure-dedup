@@ -5,8 +5,17 @@ Secure deduplication prototype with:
 - behavioral feature extraction,
 - attack/anomaly detection from client behavior.
 
-For setup on a new machine, see `NEW_LAPTOP_SETUP.md`.
+For setup on a new machine, see `docs/project_notes/NEW_LAPTOP_SETUP.md`.
 For quick local demo startup, use `./run_demo.sh start`.
+
+
+## Repository organization
+
+- **Core service code**: repository root (`app.py`, `storage.py`, `detector.py`, etc.).
+- **Deployment config**: `Dockerfile`, `.dockerignore`, `render.yaml`.
+- **Model artifacts**: `advanced_artifacts/`, `demo_artifacts/`, `extra_trees_artifacts/`, `unsupervised_artifacts/`.
+- **Project notes & reports**: `docs/project_notes/`.
+- **Generated datasets/logs**: root CSV outputs (can be relocated per your workflow).
 
 ## Training workflow (optimized)
 
