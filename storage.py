@@ -2,6 +2,8 @@ import os
 from io import BytesIO
 from pathlib import Path
 
+from encryption import decrypt_chunk, encrypt_chunk
+
 try:
     import boto3
     from botocore.config import Config as BotoConfig
@@ -73,11 +75,13 @@ def upload_chunk(chunk_hash: str, data: bytes):
     """
     Store chunk in object storage backend, fallback to local filesystem.
     """
+    payload = encrypt_chunk(data, context=chunk_hash)
+
     if _s3_client is not None:
         _s3_client.put_object(
             Bucket=BUCKET,
             Key=chunk_hash,
-            Body=data,
+            Body=payload,
             ContentType="application/octet-stream",
         )
         return
@@ -86,13 +90,13 @@ def upload_chunk(chunk_hash: str, data: bytes):
         _minio_client.put_object(
             BUCKET,
             chunk_hash,
-            BytesIO(data),
-            length=len(data),
+            BytesIO(payload),
+            length=len(payload),
             content_type="application/octet-stream",
         )
         return
 
-    (_LOCAL_STORE_DIR / chunk_hash).write_bytes(data)
+    (_LOCAL_STORE_DIR / chunk_hash).write_bytes(payload)
 
 
 def get_chunk(chunk_hash: str) -> bytes:
@@ -102,14 +106,14 @@ def get_chunk(chunk_hash: str) -> bytes:
     if _s3_client is not None:
         response = _s3_client.get_object(Bucket=BUCKET, Key=chunk_hash)
         try:
-            return response["Body"].read()
+            return decrypt_chunk(response["Body"].read(), context=chunk_hash)
         finally:
             response["Body"].close()
 
     if _minio_client is not None:
         response = _minio_client.get_object(BUCKET, chunk_hash)
         try:
-            return response.read()
+            return decrypt_chunk(response.read(), context=chunk_hash)
         finally:
             response.close()
             response.release_conn()
@@ -117,4 +121,28 @@ def get_chunk(chunk_hash: str) -> bytes:
     path = _LOCAL_STORE_DIR / chunk_hash
     if not path.exists():
         raise FileNotFoundError(f"Chunk not found: {chunk_hash}")
-    return path.read_bytes()
+    return decrypt_chunk(path.read_bytes(), context=chunk_hash)
+
+
+
+def delete_chunk(chunk_hash: str) -> None:
+    """
+    Delete chunk from storage backend if present.
+    """
+    if _s3_client is not None:
+        try:
+            _s3_client.delete_object(Bucket=BUCKET, Key=chunk_hash)
+        except Exception:
+            pass
+        return
+
+    if _minio_client is not None:
+        try:
+            _minio_client.remove_object(BUCKET, chunk_hash)
+        except Exception:
+            pass
+        return
+
+    path = _LOCAL_STORE_DIR / chunk_hash
+    if path.exists():
+        path.unlink()
