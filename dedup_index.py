@@ -71,3 +71,31 @@ def get_ref_count(chunk_hash: str) -> int:
         return int(count) if count else 0
 
     return int(_IN_MEMORY_REF_COUNTS.get(chunk_hash, 0))
+
+
+
+def decrement_chunk_ref(chunk_hash: str) -> int:
+    """
+    Decrease chunk reference count and return resulting count.
+    Removes the index entry when count reaches zero.
+    """
+    if _use_redis():
+        if r.type(chunk_hash) != "hash":
+            return 0
+
+        count = r.hget(chunk_hash, "ref_count")
+        current = int(count) if count else 0
+        if current <= 1:
+            r.delete(chunk_hash)
+            return 0
+
+        r.hincrby(chunk_hash, "ref_count", -1)
+        return current - 1
+
+    current = int(_IN_MEMORY_REF_COUNTS.get(chunk_hash, 0))
+    if current <= 1:
+        _IN_MEMORY_REF_COUNTS.pop(chunk_hash, None)
+        return 0
+
+    _IN_MEMORY_REF_COUNTS[chunk_hash] = current - 1
+    return current - 1
