@@ -3,9 +3,11 @@ import os
 import sqlite3
 from typing import Dict
 
+from db_utils import resolve_db_file
+
 from logger import REQUEST_LOGS
 
-DB_FILE = os.getenv("TELEMETRY_DB", "telemetry.db")
+DB_FILE = resolve_db_file(os.getenv("TELEMETRY_DB", "telemetry.db"))
 DETECTION_FILE = "detection_results.csv"
 
 

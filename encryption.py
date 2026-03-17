@@ -141,3 +141,7 @@ def generate_key_b64(num_bytes: int = 32) -> str:
     if num_bytes not in {16, 24, 32}:
         raise ValueError("num_bytes must be one of 16, 24, 32")
     return base64.b64encode(get_random_bytes(num_bytes)).decode("ascii")
+
+
+def payload_uses_envelope(data: bytes) -> bool:
+    return data.startswith(_MAGIC)

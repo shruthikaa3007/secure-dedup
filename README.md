@@ -198,7 +198,24 @@ Defaults baked into Docker image:
 curl -fsS "https://<your-railway-domain>/"
 ```
 
+For a demo-friendly runtime snapshot (recent events, active client policies, and reputation):
+
+```bash
+curl -fsS "https://<your-railway-domain>/demo/status?limit=20" | python -m json.tool
+```
+
 Adaptive PoW is visible through duplicate uploads and `/pow/challenge` response `adaptive_profile`.
+
+Swagger UI tip: open `https://<your-railway-domain>/docs`, click **Authorize**, and enter your `X-API-Key` (for example `dev-api-key`) before trying protected routes like `/upload`.
+
+For a guided UI automation flow (baseline upload, duplicate+PoW success, and PoW attack simulation), open `https://<your-railway-domain>/demo/ui`.
+
+Upload demo flow in UI (to avoid PoW form errors):
+1. First upload: leave `pow_proofs_json` empty (or set `{}`), then execute `/upload`.
+   - If Swagger shows `file_id=string`, clear it before execute (or leave it empty for new uploads).
+2. Upload same file again: you will get `409` with `required_challenges` for duplicate chunks.
+3. Call `/pow/verify` (or provide valid `pow_proofs_json`) and retry `/upload`.
+4. Use `/demo/status` to show recent upload + PoW events live.
 
 
 ### If Railway shows healthcheck failure (concrete fix)
@@ -218,22 +235,28 @@ If it fails, replace `railway.json` with the current repository version (strict 
 Use this exact setup:
 
 1. In Railway **Settings -> Healthcheck Path**, set it to `/` (root).
-2. In Railway **Settings -> Start Command**, set `python start_server.py` (or keep repo `railway.json` command).
-3. Ensure these env vars exist:
+
+2. Keep `/health` for automated probes, and use `/demo/status` during demos to show what the service is doing in near real time.
+3. In Railway **Settings -> Start Command**, set `python start_server.py` (or keep repo `railway.json` command).
+4. Ensure these env vars exist:
    - `API_KEYS=dev-api-key`
    - `MODEL_DIR=advanced_artifacts`
    - `STORAGE_BACKEND=filesystem`
    - `TELEMETRY_DB=/tmp/telemetry.db`
    - `LOCAL_CHUNK_DIR=/tmp/local_chunks`
-4. Redeploy from latest commit.
-5. In Railway **Deployments -> Logs**, confirm process starts and binds to a port.
-6. Check logs for a line like: `Uvicorn running on http://0.0.0.0:<port>`.
-7. Verify both endpoints:
+5. Redeploy from latest commit.
+6. In Railway **Deployments -> Logs**, confirm process starts and binds to a port.
+7. Check logs for a line like: `Uvicorn running on http://0.0.0.0:<port>`.
+8. Verify both endpoints:
 
 ```bash
 curl -fsS "https://<your-railway-domain>/"
 curl -fsS "https://<your-railway-domain>/health"
 ```
+
+If your logs include `PermissionError: [Errno 13]` for `/var/data/local_chunks`, set `LOCAL_CHUNK_DIR=/tmp/local_chunks` and redeploy.
+
+If your logs include `sqlite3.OperationalError: unable to open database file`, set `TELEMETRY_DB=/tmp/telemetry.db` and redeploy.
 
 If this still fails in your Railway workspace, use Render UI flow below (same Docker image).
 
@@ -358,6 +381,12 @@ Example runtime config:
 ```bash
 export CHUNK_ENCRYPTION_KEY="<base64-32-byte-key>"
 ```
+
+Demo proof in UI/API:
+
+1. Upload a file once (`POST /upload`) with API key + client ID.
+2. Call `GET /demo/encryption` to show runtime encryption flags.
+3. Copy one `chunk_hash` from upload response and call `GET /demo/encryption?chunk_hash=<hash>` to show `encrypted_envelope: true` for stored chunk payloads.
 
 
 ## What happens if two files are similar but slightly different?
