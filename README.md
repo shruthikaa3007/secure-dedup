@@ -208,8 +208,11 @@ Adaptive PoW is visible through duplicate uploads and `/pow/challenge` response 
 
 Swagger UI tip: open `https://<your-railway-domain>/docs`, click **Authorize**, and enter your `X-API-Key` (for example `dev-api-key`) before trying protected routes like `/upload`.
 
+For a guided UI automation flow (baseline upload, duplicate+PoW success, and PoW attack simulation), open `https://<your-railway-domain>/demo/ui`.
+
 Upload demo flow in UI (to avoid PoW form errors):
 1. First upload: leave `pow_proofs_json` empty (or set `{}`), then execute `/upload`.
+   - If Swagger shows `file_id=string`, clear it before execute (or leave it empty for new uploads).
 2. Upload same file again: you will get `409` with `required_challenges` for duplicate chunks.
 3. Call `/pow/verify` (or provide valid `pow_proofs_json`) and retry `/upload`.
 4. Use `/demo/status` to show recent upload + PoW events live.
@@ -378,6 +381,12 @@ Example runtime config:
 ```bash
 export CHUNK_ENCRYPTION_KEY="<base64-32-byte-key>"
 ```
+
+Demo proof in UI/API:
+
+1. Upload a file once (`POST /upload`) with API key + client ID.
+2. Call `GET /demo/encryption` to show runtime encryption flags.
+3. Copy one `chunk_hash` from upload response and call `GET /demo/encryption?chunk_hash=<hash>` to show `encrypted_envelope: true` for stored chunk payloads.
 
 
 ## What happens if two files are similar but slightly different?

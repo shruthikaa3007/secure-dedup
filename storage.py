@@ -2,7 +2,7 @@ import os
 from io import BytesIO
 from pathlib import Path
 
-from encryption import decrypt_chunk, encrypt_chunk
+from encryption import decrypt_chunk, encrypt_chunk, payload_uses_envelope
 
 try:
     import boto3
@@ -163,3 +163,49 @@ def delete_chunk(chunk_hash: str) -> None:
     path = _LOCAL_STORE_DIR / chunk_hash
     if path.exists():
         path.unlink()
+
+
+def get_chunk_envelope_info(chunk_hash: str):
+    """Inspect stored payload envelope without decrypting chunk contents."""
+    if _s3_client is not None:
+        response = _s3_client.get_object(Bucket=BUCKET, Key=chunk_hash)
+        try:
+            payload = response["Body"].read()
+        except Exception as exc:
+            raise FileNotFoundError(f"Chunk not found: {chunk_hash}") from exc
+        finally:
+            response["Body"].close()
+        return {
+            "backend": "s3",
+            "exists": True,
+            "encrypted_envelope": payload_uses_envelope(payload),
+            "stored_size": len(payload),
+        }
+
+    if _minio_client is not None:
+        try:
+            response = _minio_client.get_object(BUCKET, chunk_hash)
+        except Exception as exc:
+            raise FileNotFoundError(f"Chunk not found: {chunk_hash}") from exc
+        try:
+            payload = response.read()
+        finally:
+            response.close()
+            response.release_conn()
+        return {
+            "backend": "minio",
+            "exists": True,
+            "encrypted_envelope": payload_uses_envelope(payload),
+            "stored_size": len(payload),
+        }
+
+    path = _LOCAL_STORE_DIR / chunk_hash
+    if not path.exists():
+        raise FileNotFoundError(f"Chunk not found: {chunk_hash}")
+    payload = path.read_bytes()
+    return {
+        "backend": "filesystem",
+        "exists": True,
+        "encrypted_envelope": payload_uses_envelope(payload),
+        "stored_size": len(payload),
+    }
