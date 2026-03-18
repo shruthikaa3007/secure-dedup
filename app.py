@@ -7,8 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
-from fastapi.responses import RedirectResponse
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -47,7 +47,7 @@ from reputation import (
     record_policy_action as record_reputation_policy_action,
     record_pow_result,
 )
-from storage import delete_chunk, get_chunk, get_chunk_raw, storage_status, upload_chunk
+from storage import delete_chunk, get_chunk, get_chunk_envelope_info, get_chunk_raw, storage_status, upload_chunk
 
 app = FastAPI()
 
@@ -255,6 +255,10 @@ def _require_demo_mode() -> None:
         raise HTTPException(status_code=404, detail={"error": "Demo mode disabled"})
 
 
+def _require_api_key(x_api_key: Optional[str] = Header(default=None, alias="X-API-Key")) -> str:
+    return validate_api_key(x_api_key)
+
+
 @app.get("/", include_in_schema=False)
 def demo_root():
     if UI_DIR.exists():
@@ -262,8 +266,8 @@ def demo_root():
     return {"status": "ok", "message": "UI assets not found. Use API endpoints instead."}
 
 
-@app.get("/demo/status")
-def demo_status():
+@app.get("/demo/config")
+def demo_config():
     storage = storage_status()
     return {
         "status": "ok",

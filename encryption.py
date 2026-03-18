@@ -149,6 +149,11 @@ def is_encrypted_payload(data: bytes) -> bool:
     return data.startswith(_MAGIC)
 
 
+def payload_uses_envelope(data: bytes) -> bool:
+    """Backward-compatible helper used by storage inspection endpoints."""
+    return is_encrypted_payload(data)
+
+
 def encryption_status() -> dict:
     try:
         key = _load_key()
