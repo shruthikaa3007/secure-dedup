@@ -334,6 +334,14 @@ Inspect `challenge.adaptive_profile` to confirm adaptive PoW difficulty is activ
 ./run_demo.sh test
 ```
 
+Generate an isolated smoke-test report (Markdown + JSON):
+
+```bash
+.venv/bin/python tests/run_smoke_tests.py
+```
+
+Reports are written to `test_reports/`.
+
 
 ## Base-paper alignment upgrades
 

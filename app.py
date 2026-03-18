@@ -216,9 +216,23 @@ def _enforce_pre_request_policy(client_id: str) -> None:
         _raise_policy_exception(client_id, history_policy, history_result)
 
 
+def _normalize_optional_form_value(raw: Optional[str]) -> Optional[str]:
+    """Normalize optional form values and swallow placeholder defaults."""
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        raw = str(raw)
+    normalized = raw.strip()
+    if not normalized:
+        return None
+    if normalized.lower() in {"string", "none", "null"}:
+        return None
+    return normalized
+
+
 def _parse_pow_proofs(raw: Optional[str]) -> Dict[str, Dict[str, str]]:
     normalized = _normalize_optional_form_value(raw)
-    if not normalized or normalized.lower() == "string":
+    if not normalized:
         return {}
 
     try:

@@ -4,43 +4,54 @@ const els = {
   apiKey: byId("apiKey"),
   clientId: byId("clientId"),
   policyClientId: byId("policyClientId"),
+  demoContent: byId("demoContent"),
   fileInput: byId("fileInput"),
+  fileMeta: byId("fileMeta"),
+  runFullDemo: byId("runFullDemo"),
+  runBaselineStep: byId("runBaselineStep"),
+  runDuplicateStep: byId("runDuplicateStep"),
+  runSolveRetryStep: byId("runSolveRetryStep"),
+  runAttackStep: byId("runAttackStep"),
   uploadOnce: byId("uploadOnce"),
   uploadDuplicate: byId("uploadDuplicate"),
-  retryUpload: byId("retryUpload"),
   solvePow: byId("solvePow"),
-  refreshStatus: byId("refreshStatus"),
-  refreshStatusAlt: byId("refreshStatusAlt"),
-  refreshMetrics: byId("refreshMetrics"),
+  retryUpload: byId("retryUpload"),
   inspectChunk: byId("inspectChunk"),
   forceRateLimit: byId("forceRateLimit"),
   forceBlock: byId("forceBlock"),
   clearPolicy: byId("clearPolicy"),
+  refreshOverview: byId("refreshOverview"),
+  refreshMetrics: byId("refreshMetrics"),
   healthChip: byId("healthChip"),
   encryptionChip: byId("encryptionChip"),
-  policyChip: byId("policyChip"),
   storageChip: byId("storageChip"),
+  policyChip: byId("policyChip"),
+  detectionChip: byId("detectionChip"),
+  activityChip: byId("activityChip"),
   healthMeta: byId("healthMeta"),
   encryptionMeta: byId("encryptionMeta"),
-  policyMeta: byId("policyMeta"),
   storageMeta: byId("storageMeta"),
+  policyMeta: byId("policyMeta"),
+  detectionMeta: byId("detectionMeta"),
+  activityMeta: byId("activityMeta"),
+  scenarioLog: byId("scenarioLog"),
   uploadLog: byId("uploadLog"),
   powLog: byId("powLog"),
   policyLog: byId("policyLog"),
-  metricsLog: byId("metricsLog"),
   encryptionLog: byId("encryptionLog"),
+  statusLog: byId("statusLog"),
+  metricsLog: byId("metricsLog"),
   eventLog: byId("eventLog"),
 };
 
 const state = {
-  file: null,
+  selectedFile: null,
   lastChallenges: [],
   lastProofs: null,
-  lastUpload: null,
   lastChunk: null,
 };
 
-function chip(el, text, level) {
+function setChip(el, text, level) {
   el.textContent = text;
   el.classList.remove("good", "warn", "bad");
   if (level) {
@@ -49,7 +60,7 @@ function chip(el, text, level) {
 }
 
 function pretty(payload) {
-  if (payload === undefined) return "No data.";
+  if (payload === undefined) return "No data";
   if (typeof payload === "string") return payload;
   try {
     return JSON.stringify(payload, null, 2);
@@ -58,247 +69,423 @@ function pretty(payload) {
   }
 }
 
+function appendScenario(message) {
+  const stamp = new Date().toLocaleTimeString();
+  els.scenarioLog.textContent = `[${stamp}] ${message}\n` + els.scenarioLog.textContent;
+}
+
 function logEvent(label, payload) {
   const stamp = new Date().toLocaleTimeString();
   const entry = `[${stamp}] ${label}\n${pretty(payload)}\n\n`;
   els.eventLog.textContent = entry + els.eventLog.textContent;
 }
 
-function headers() {
-  return {
-    "X-API-Key": els.apiKey.value.trim(),
-    "X-Client-ID": els.clientId.value.trim(),
+function apiKey() {
+  return (els.apiKey.value || "").trim();
+}
+
+function clientId() {
+  return (els.clientId.value || "").trim();
+}
+
+function policyClientId() {
+  return (els.policyClientId.value || "").trim() || clientId();
+}
+
+function defaultHeaders(withClientId = true) {
+  const headers = {
+    "X-API-Key": apiKey(),
   };
+  if (withClientId) {
+    headers["X-Client-ID"] = clientId();
+  }
+  return headers;
 }
 
 async function readBody(res) {
-  const ct = res.headers.get("content-type") || "";
-  if (ct.includes("application/json")) {
+  const contentType = res.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
     return res.json();
   }
   return res.text();
 }
 
 async function fetchJson(path, options = {}) {
-  const res = await fetch(path, options);
-  const body = await readBody(res);
-  return { ok: res.ok, status: res.status, body };
+  try {
+    const res = await fetch(path, options);
+    const body = await readBody(res);
+    return { ok: res.ok, status: res.status, body };
+  } catch (err) {
+    return {
+      ok: false,
+      status: 0,
+      body: { error: "Network error", detail: String(err) },
+    };
+  }
 }
 
-async function refreshStatus() {
-  const health = await fetchJson("/health");
-  if (health.ok && health.body.status === "ok") {
-    chip(els.healthChip, "Healthy", "good");
-    els.healthMeta.textContent = "API responding";
-  } else {
-    chip(els.healthChip, "Down", "bad");
-    els.healthMeta.textContent = "No response from /health";
+function effectiveDemoFile() {
+  if (state.selectedFile) {
+    return {
+      payload: state.selectedFile,
+      name: state.selectedFile.name,
+      size: state.selectedFile.size,
+    };
   }
 
-  const status = await fetchJson("/demo/status");
-  if (status.ok) {
-    const enc = status.body.encryption || {};
-    if (enc.enabled) {
-      chip(els.encryptionChip, "Enabled", "good");
-      els.encryptionMeta.textContent = `Key ${enc.key_bytes || 0} bytes, segment ${enc.segment_size || "n/a"}`;
+  const rawText = (els.demoContent.value || "").trim();
+  const content = rawText || `secure dedup demo ${new Date().toISOString()}`;
+  const blob = new Blob([content], { type: "text/plain" });
+  return {
+    payload: blob,
+    name: "demo-auto.txt",
+    size: blob.size,
+  };
+}
+
+function buildInvalidProofs() {
+  const bad = {};
+  for (const challenge of state.lastChallenges) {
+    bad[challenge.chunk_hash] = {
+      challenge_id: challenge.challenge_id,
+      proof: "deadbeef",
+    };
+  }
+  return bad;
+}
+
+async function refreshPolicySnapshot() {
+  const id = policyClientId();
+  if (!id) {
+    setChip(els.policyChip, "Missing ID", "warn");
+    els.policyMeta.textContent = "Set Policy Client ID";
+    return null;
+  }
+
+  const result = await fetchJson(`/demo/policy/${encodeURIComponent(id)}`, {
+    headers: {
+      "X-API-Key": apiKey(),
+    },
+  });
+
+  if (result.ok) {
+    const active = result.body.active_policy;
+    if (active && active.action && active.action !== "ALLOW") {
+      const level = active.action === "BLOCK" ? "bad" : "warn";
+      setChip(els.policyChip, active.action, level);
+      els.policyMeta.textContent = `Cooldown ${Math.round(active.remaining_sec || 0)}s`;
     } else {
-      chip(els.encryptionChip, "Disabled", "warn");
-      els.encryptionMeta.textContent = "Set CHUNK_ENCRYPTION_KEY to enable";
+      setChip(els.policyChip, "ALLOW", "good");
+      els.policyMeta.textContent = "No active policy action";
+    }
+    els.policyLog.textContent = pretty(result.body);
+  } else {
+    setChip(els.policyChip, "Error", "bad");
+    els.policyMeta.textContent = "Policy endpoint failed";
+    els.policyLog.textContent = pretty(result.body);
+  }
+
+  return result;
+}
+
+async function refreshOverview() {
+  const policyPromise = refreshPolicySnapshot();
+  const [health, config, status, policy] = await Promise.all([
+    fetchJson("/health"),
+    fetchJson("/demo/config"),
+    fetchJson("/demo/status?limit=20"),
+    policyPromise,
+  ]);
+
+  if (health.ok && health.body.status === "ok") {
+    setChip(els.healthChip, "Healthy", "good");
+    els.healthMeta.textContent = "Service responding on /health";
+  } else {
+    setChip(els.healthChip, "Unhealthy", "bad");
+    els.healthMeta.textContent = `Health check failed (${health.status || "network"})`;
+  }
+
+  if (config.ok) {
+    const encryption = config.body.encryption || {};
+    if (encryption.enabled) {
+      setChip(els.encryptionChip, "Enabled", "good");
+      els.encryptionMeta.textContent = `Key ${encryption.key_bytes || 0} bytes`;
+    } else {
+      setChip(els.encryptionChip, "Disabled", "warn");
+      els.encryptionMeta.textContent = "Set CHUNK_ENCRYPTION_KEY for encrypted chunks";
     }
 
-    const storage = status.body.storage || {};
-    chip(els.storageChip, storage.backend || "Unknown", "good");
-    els.storageMeta.textContent = storage.backend ? `Backend: ${storage.backend}` : "No storage info";
+    const storage = config.body.storage || {};
+    setChip(els.storageChip, storage.backend || "Unknown", storage.backend ? "good" : "warn");
+    els.storageMeta.textContent = storage.local_dir ? `Dir: ${storage.local_dir}` : "No storage details";
+
+    const detection = (config.body.detection || {}).mode || "unknown";
+    setChip(els.detectionChip, detection, detection === "supervised" ? "good" : "warn");
+    els.detectionMeta.textContent = `Threshold ${(config.body.detection || {}).unsupervised_threshold ?? "n/a"}`;
   } else {
-    chip(els.encryptionChip, "Unknown", "warn");
-    chip(els.storageChip, "Unknown", "warn");
+    setChip(els.encryptionChip, "Error", "bad");
+    setChip(els.storageChip, "Error", "bad");
+    setChip(els.detectionChip, "Error", "bad");
+    els.encryptionMeta.textContent = "Failed to load /demo/config";
+    els.storageMeta.textContent = "Failed to load /demo/config";
+    els.detectionMeta.textContent = "Failed to load /demo/config";
   }
 
-  await refreshPolicy();
-  logEvent("Status refreshed", status.body || status);
+  if (status.ok) {
+    const summary = status.body.summary || {};
+    const activeClients = summary.active_clients || 0;
+    const bufferedEvents = summary.total_buffered_events || 0;
+    setChip(els.activityChip, `${activeClients} clients`, activeClients > 0 ? "good" : "warn");
+    els.activityMeta.textContent = `${bufferedEvents} buffered events`;
+    els.statusLog.textContent = pretty(status.body);
+  } else {
+    setChip(els.activityChip, "Error", "bad");
+    els.activityMeta.textContent = "Failed to load /demo/status";
+    els.statusLog.textContent = pretty(status.body);
+  }
+
+  if (policy) {
+    logEvent("Overview refreshed", {
+      health,
+      config,
+      status,
+      policy,
+    });
+  }
 }
 
 async function refreshMetrics() {
   const metrics = await fetchJson("/metrics");
-  if (metrics.ok) {
-    els.metricsLog.textContent = pretty(metrics.body);
-  } else {
-    els.metricsLog.textContent = pretty(metrics.body);
-  }
-  logEvent("Metrics", metrics.body || metrics);
+  els.metricsLog.textContent = pretty(metrics.body);
+  logEvent("Metrics refreshed", metrics.body || metrics);
 }
 
-async function refreshPolicy() {
-  const clientId = els.policyClientId.value.trim() || els.clientId.value.trim();
-  if (!clientId) {
-    chip(els.policyChip, "Missing ID", "warn");
-    els.policyMeta.textContent = "Set a policy client id";
-    return;
-  }
-
-  const res = await fetchJson(`/demo/policy/${encodeURIComponent(clientId)}`, {
-    headers: { "X-API-Key": els.apiKey.value.trim() },
-  });
-
-  if (res.ok) {
-    const active = res.body.active_policy;
-    if (active && active.action && active.action !== "ALLOW") {
-      chip(els.policyChip, active.action, active.action === "BLOCK" ? "bad" : "warn");
-      els.policyMeta.textContent = `Cooldown ${Math.round(active.remaining_sec || 0)}s`;
-    } else {
-      chip(els.policyChip, "ALLOW", "good");
-      els.policyMeta.textContent = "No active policy";
-    }
-    els.policyLog.textContent = pretty(res.body);
-  } else {
-    chip(els.policyChip, "Unknown", "warn");
-    els.policyMeta.textContent = "Policy snapshot failed";
-    els.policyLog.textContent = pretty(res.body);
-  }
-  logEvent("Policy snapshot", res.body || res);
-}
-
-async function doUpload(withProofs) {
-  if (!state.file) {
-    logEvent("Upload", "Select a file first.");
-    return;
-  }
-
+async function uploadFile(mode = "none") {
+  const demoFile = effectiveDemoFile();
   const form = new FormData();
-  form.append("file", state.file);
-  if (withProofs && state.lastProofs) {
+  form.append("file", demoFile.payload, demoFile.name);
+
+  if (mode === "good" && state.lastProofs) {
     form.append("pow_proofs_json", JSON.stringify(state.lastProofs));
   }
 
-  const res = await fetch("/upload", {
+  if (mode === "bad" && state.lastChallenges.length) {
+    form.append("pow_proofs_json", JSON.stringify(buildInvalidProofs()));
+  }
+
+  const result = await fetchJson("/upload", {
     method: "POST",
-    headers: headers(),
+    headers: defaultHeaders(true),
     body: form,
   });
 
-  const body = await readBody(res);
-  if (!res.ok) {
-    els.uploadLog.textContent = pretty(body);
-    logEvent("Upload failed", body);
+  els.uploadLog.textContent = pretty(result.body);
+  logEvent(`Upload (${mode})`, result.body || result);
 
-    if (res.status === 409 && body.detail && body.detail.required_challenges) {
-      state.lastChallenges = body.detail.required_challenges;
-      els.powLog.textContent = pretty(state.lastChallenges);
-      logEvent("PoW challenges", state.lastChallenges);
-    }
-    return;
+  if (result.ok) {
+    state.lastChallenges = [];
+    state.lastProofs = null;
+    const recipe = result.body.file_recipe || [];
+    state.lastChunk = recipe.length ? recipe[0] : null;
+    appendScenario(`Upload successful (${demoFile.name}, ${demoFile.size} bytes)`);
+    return result;
   }
 
-  state.lastUpload = body;
-  state.lastChallenges = [];
-  state.lastProofs = null;
-  els.uploadLog.textContent = pretty(body);
-  els.powLog.textContent = "No challenges yet.";
-  logEvent("Upload success", body);
-
-  if (body.file_recipe && body.file_recipe.length > 0) {
-    state.lastChunk = body.file_recipe[0];
+  const detail = result.body && result.body.detail;
+  if (result.status === 409 && detail && detail.required_challenges) {
+    state.lastChallenges = detail.required_challenges;
+    els.powLog.textContent = pretty(detail.required_challenges);
+    appendScenario(`PoW required: ${detail.required_challenges.length} challenge(s) returned`);
+  } else {
+    appendScenario(`Upload failed with status ${result.status}`);
   }
 
-  await refreshPolicy();
+  return result;
 }
 
-async function solvePow() {
-  if (!state.lastChallenges || state.lastChallenges.length === 0) {
-    logEvent("PoW", "No challenges available to solve.");
-    return;
+async function solvePowChallenges() {
+  if (!state.lastChallenges.length) {
+    appendScenario("No pending PoW challenges to solve.");
+    return { ok: false, status: 0, body: { error: "No challenges available" } };
   }
 
-  const res = await fetchJson("/demo/solve_pow", {
+  const result = await fetchJson("/demo/solve_pow", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-API-Key": els.apiKey.value.trim(),
+      "X-API-Key": apiKey(),
     },
     body: JSON.stringify({ challenges: state.lastChallenges }),
   });
 
-  if (res.ok) {
-    state.lastProofs = res.body.pow_proofs || null;
-    els.powLog.textContent = pretty(res.body);
+  els.powLog.textContent = pretty(result.body);
+  logEvent("PoW solve", result.body || result);
+
+  if (result.ok && result.body.pow_proofs) {
+    state.lastProofs = result.body.pow_proofs;
+    appendScenario("PoW proofs generated successfully.");
   } else {
-    els.powLog.textContent = pretty(res.body);
+    appendScenario(`PoW solve failed (${result.status}).`);
   }
-  logEvent("PoW solver", res.body || res);
+
+  return result;
 }
 
-async function retryUploadWithProofs() {
+async function retryWithProofs() {
   if (!state.lastProofs) {
-    logEvent("Upload", "No proofs available. Solve PoW first.");
+    appendScenario("No proofs available. Run PoW solve first.");
     return;
   }
-  await doUpload(true);
+  await uploadFile("good");
 }
 
-async function inspectChunk() {
-  const chunk = state.lastChunk;
-  if (!chunk) {
-    logEvent("Inspect", "No chunk available. Upload a file first.");
+async function inspectLastChunk() {
+  if (!state.lastChunk) {
+    appendScenario("No chunk to inspect yet. Upload a file first.");
     return;
   }
-  const res = await fetchJson(`/demo/chunk/${encodeURIComponent(chunk)}`, {
-    headers: { "X-API-Key": els.apiKey.value.trim() },
+
+  const result = await fetchJson(`/demo/chunk/${encodeURIComponent(state.lastChunk)}`, {
+    headers: {
+      "X-API-Key": apiKey(),
+    },
   });
-  els.encryptionLog.textContent = pretty(res.body);
-  logEvent("Chunk inspect", res.body || res);
+
+  els.encryptionLog.textContent = pretty(result.body);
+  logEvent("Chunk inspect", result.body || result);
 }
 
 async function forcePolicy(action) {
-  const clientId = els.policyClientId.value.trim() || els.clientId.value.trim();
-  if (!clientId) {
-    logEvent("Policy", "Set a policy client id.");
+  const id = policyClientId();
+  if (!id) {
+    appendScenario("Policy client id missing.");
     return;
   }
-  const res = await fetchJson("/demo/force-policy", {
+
+  const result = await fetchJson("/demo/force-policy", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-API-Key": els.apiKey.value.trim(),
+      "X-API-Key": apiKey(),
     },
-    body: JSON.stringify({ client_id: clientId, action }),
+    body: JSON.stringify({ client_id: id, action }),
   });
-  els.policyLog.textContent = pretty(res.body);
-  logEvent(`Force policy ${action}`, res.body || res);
-  await refreshPolicy();
+
+  els.policyLog.textContent = pretty(result.body);
+  logEvent(`Force policy ${action}`, result.body || result);
+  await refreshPolicySnapshot();
 }
 
 async function clearPolicy() {
-  const clientId = els.policyClientId.value.trim() || els.clientId.value.trim();
-  const res = await fetchJson("/demo/clear-policy", {
+  const id = policyClientId();
+  if (!id) {
+    appendScenario("Policy client id missing.");
+    return;
+  }
+
+  const result = await fetchJson("/demo/clear-policy", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-API-Key": els.apiKey.value.trim(),
+      "X-API-Key": apiKey(),
     },
-    body: JSON.stringify({ client_id: clientId }),
+    body: JSON.stringify({ client_id: id }),
   });
-  els.policyLog.textContent = pretty(res.body);
-  logEvent("Clear policy", res.body || res);
-  await refreshPolicy();
+
+  els.policyLog.textContent = pretty(result.body);
+  logEvent("Clear policy", result.body || result);
+  await refreshPolicySnapshot();
+}
+
+async function runBaselineStep() {
+  appendScenario("Step 1: Baseline upload started.");
+  await uploadFile("none");
+  await refreshOverview();
+}
+
+async function runDuplicateStep() {
+  appendScenario("Step 2: Duplicate upload started (expecting PoW challenge).");
+  await uploadFile("none");
+  await refreshOverview();
+}
+
+async function runSolveRetryStep() {
+  appendScenario("Step 3: Solve PoW and retry upload.");
+  if (!state.lastChallenges.length) {
+    appendScenario("No pending challenge found. Triggering duplicate upload first.");
+    await uploadFile("none");
+  }
+  if (!state.lastChallenges.length) {
+    appendScenario("Still no challenge returned; cannot run solve+retry.");
+    return;
+  }
+
+  const solved = await solvePowChallenges();
+  if (solved.ok) {
+    await retryWithProofs();
+  }
+  await refreshOverview();
+  await refreshMetrics();
+}
+
+async function runAttackStep() {
+  appendScenario("Step 4: Bad proof attack simulation started.");
+  if (!state.lastChallenges.length) {
+    appendScenario("No pending challenge. Triggering duplicate upload first.");
+    await uploadFile("none");
+  }
+
+  if (!state.lastChallenges.length) {
+    appendScenario("No challenge available for attack simulation.");
+    return;
+  }
+
+  const attack = await uploadFile("bad");
+  if (!attack.ok) {
+    appendScenario(`Attack request blocked/rejected as expected (status ${attack.status}).`);
+  }
+  await refreshOverview();
+}
+
+async function runFullDemo() {
+  els.scenarioLog.textContent = "Running full demo story...\n";
+  appendScenario("Full story: baseline -> duplicate challenge -> solve+retry -> optional bad-proof attack.");
+  await runBaselineStep();
+  await runDuplicateStep();
+  await runSolveRetryStep();
+  await runAttackStep();
+  appendScenario("Full demo story completed.");
 }
 
 els.fileInput.addEventListener("change", (event) => {
-  state.file = event.target.files[0] || null;
-  if (state.file) {
-    logEvent("File selected", { name: state.file.name, size: state.file.size });
+  state.selectedFile = event.target.files[0] || null;
+  if (state.selectedFile) {
+    els.fileMeta.textContent = `Selected: ${state.selectedFile.name} (${state.selectedFile.size} bytes)`;
+    logEvent("File selected", {
+      name: state.selectedFile.name,
+      size: state.selectedFile.size,
+      type: state.selectedFile.type,
+    });
+  } else {
+    els.fileMeta.textContent = "No file selected. Auto-generated demo payload will be used.";
   }
 });
 
-els.uploadOnce.addEventListener("click", () => doUpload(false));
-els.uploadDuplicate.addEventListener("click", () => doUpload(false));
-els.solvePow.addEventListener("click", solvePow);
-els.retryUpload.addEventListener("click", retryUploadWithProofs);
-els.refreshStatus.addEventListener("click", refreshStatus);
-els.refreshStatusAlt.addEventListener("click", refreshStatus);
-els.refreshMetrics.addEventListener("click", refreshMetrics);
-els.inspectChunk.addEventListener("click", inspectChunk);
+els.runFullDemo.addEventListener("click", runFullDemo);
+els.runBaselineStep.addEventListener("click", runBaselineStep);
+els.runDuplicateStep.addEventListener("click", runDuplicateStep);
+els.runSolveRetryStep.addEventListener("click", runSolveRetryStep);
+els.runAttackStep.addEventListener("click", runAttackStep);
+els.uploadOnce.addEventListener("click", () => uploadFile("none"));
+els.uploadDuplicate.addEventListener("click", () => uploadFile("none"));
+els.solvePow.addEventListener("click", solvePowChallenges);
+els.retryUpload.addEventListener("click", retryWithProofs);
+els.inspectChunk.addEventListener("click", inspectLastChunk);
 els.forceRateLimit.addEventListener("click", () => forcePolicy("RATE_LIMIT"));
 els.forceBlock.addEventListener("click", () => forcePolicy("BLOCK"));
 els.clearPolicy.addEventListener("click", clearPolicy);
+els.refreshOverview.addEventListener("click", refreshOverview);
+els.refreshMetrics.addEventListener("click", refreshMetrics);
 
-refreshStatus();
+refreshOverview();
+refreshMetrics();
