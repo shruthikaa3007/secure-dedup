@@ -141,3 +141,32 @@ def generate_key_b64(num_bytes: int = 32) -> str:
     if num_bytes not in {16, 24, 32}:
         raise ValueError("num_bytes must be one of 16, 24, 32")
     return base64.b64encode(get_random_bytes(num_bytes)).decode("ascii")
+
+
+def is_encrypted_payload(data: bytes) -> bool:
+    if not data:
+        return False
+    return data.startswith(_MAGIC)
+
+
+def encryption_status() -> dict:
+    try:
+        key = _load_key()
+        status = {
+            "enabled": bool(key),
+            "key_bytes": len(key) if key else 0,
+            "strict": _strict_mode(),
+        }
+    except Exception as exc:
+        status = {
+            "enabled": False,
+            "key_bytes": 0,
+            "strict": _strict_mode(),
+            "error": str(exc),
+        }
+    try:
+        status["segment_size"] = _segment_size()
+    except Exception as exc:
+        status["segment_size"] = None
+        status["error"] = str(exc)
+    return status

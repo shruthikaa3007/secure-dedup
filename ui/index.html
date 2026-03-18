@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Secure Dedup Live Demo</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Secure Deduplication</p>
+          <h1>Live Defense Console</h1>
+          <p class="lead">
+            Observe encryption at rest, proof of ownership, and adaptive rate limiting as they happen.
+            This console uses the live API running on Railway.
+          </p>
+          <div class="button-row">
+            <button class="primary" id="refreshStatus">Refresh Status</button>
+            <button class="ghost" id="refreshMetrics">Refresh Metrics</button>
+          </div>
+        </div>
+        <div class="status-grid">
+          <div class="card">
+            <p class="card-title">API Health</p>
+            <p class="chip" id="healthChip">Unknown</p>
+            <p class="meta" id="healthMeta">Waiting for /health</p>
+          </div>
+          <div class="card">
+            <p class="card-title">Encryption</p>
+            <p class="chip" id="encryptionChip">Unknown</p>
+            <p class="meta" id="encryptionMeta">Awaiting /demo/status</p>
+          </div>
+          <div class="card">
+            <p class="card-title">Policy</p>
+            <p class="chip" id="policyChip">Unknown</p>
+            <p class="meta" id="policyMeta">Awaiting /demo/policy</p>
+          </div>
+          <div class="card">
+            <p class="card-title">Storage</p>
+            <p class="chip" id="storageChip">Unknown</p>
+            <p class="meta" id="storageMeta">Awaiting /demo/status</p>
+          </div>
+        </div>
+      </header>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Access</h2>
+          <p>Use the same API key and client IDs you plan to demo.</p>
+        </div>
+        <div class="panel-grid">
+          <label>
+            <span>API Key</span>
+            <input id="apiKey" type="text" value="dev-api-key" />
+          </label>
+          <label>
+            <span>Client ID</span>
+            <input id="clientId" type="text" value="demo-client-1" />
+          </label>
+          <label>
+            <span>Policy Client ID</span>
+            <input id="policyClientId" type="text" value="demo-attacker-live" />
+          </label>
+        </div>
+      </section>
+
+      <section class="grid two-col">
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Upload & Dedup</h2>
+            <p>Upload a file, then upload it again to trigger PoW and dedup logic.</p>
+          </div>
+          <div class="stack">
+            <label class="file-input">
+              <input id="fileInput" type="file" />
+              <span>Select file</span>
+            </label>
+            <div class="button-row">
+              <button class="primary" id="uploadOnce">Upload Once</button>
+              <button class="ghost" id="uploadDuplicate">Upload Duplicate</button>
+            </div>
+            <div class="mini">
+              <p><strong>Last Upload</strong></p>
+              <pre id="uploadLog">No uploads yet.</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>PoW Challenges</h2>
+            <p>Duplicate uploads return challenges. Solve them to prove ownership.</p>
+          </div>
+          <div class="stack">
+            <div class="button-row">
+              <button class="primary" id="solvePow">Auto-Solve PoW</button>
+              <button class="ghost" id="retryUpload">Retry Upload with Proofs</button>
+            </div>
+            <div class="mini">
+              <p><strong>Challenges</strong></p>
+              <pre id="powLog">No challenges yet.</pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid two-col">
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Security Controls</h2>
+            <p>Show rate limiting and blocking live.</p>
+          </div>
+          <div class="stack">
+            <div class="button-row">
+              <button class="primary" id="forceRateLimit">Force Rate Limit</button>
+              <button class="ghost" id="forceBlock">Force Block</button>
+              <button class="ghost" id="clearPolicy">Clear Policy</button>
+            </div>
+            <div class="mini">
+              <p><strong>Policy Snapshot</strong></p>
+              <pre id="policyLog">No policy snapshot yet.</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Metrics & Encryption</h2>
+            <p>Inspect runtime metrics and confirm encrypted payloads.</p>
+          </div>
+          <div class="stack">
+            <div class="button-row">
+              <button class="primary" id="inspectChunk">Inspect Last Chunk</button>
+              <button class="ghost" id="refreshStatusAlt">Refresh Status</button>
+            </div>
+            <div class="mini">
+              <p><strong>Metrics</strong></p>
+              <pre id="metricsLog">No metrics yet.</pre>
+            </div>
+            <div class="mini">
+              <p><strong>Encryption Inspect</strong></p>
+              <pre id="encryptionLog">No chunk inspected yet.</pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Event Stream</h2>
+          <p>All API responses land here for quick narration during the demo.</p>
+        </div>
+        <pre id="eventLog">Ready.</pre>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>

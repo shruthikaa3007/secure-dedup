@@ -131,3 +131,13 @@ def get_active_policy_action(client_id: str) -> Optional[Dict]:
         "ttl_sec": int(data.get("ttl_sec", 0)),
         "remaining_sec": max(0.0, float(data.get("expires_at", 0.0)) - _now()),
     }
+
+
+def clear_policy_action(client_id: str) -> None:
+    """
+    Clear active policy state for a client.
+    """
+    if _redis_ok():
+        redis_client.delete(_policy_key(client_id))
+        return
+    _IN_MEMORY_POLICY.pop(client_id, None)

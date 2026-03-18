@@ -71,6 +71,26 @@ if _s3_client is None and _minio_client is None:
     _LOCAL_STORE_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def storage_status() -> dict:
+    if _s3_client is not None:
+        return {
+            "backend": "s3",
+            "bucket": BUCKET,
+            "local_dir": str(_LOCAL_STORE_DIR),
+        }
+    if _minio_client is not None:
+        return {
+            "backend": "minio",
+            "bucket": BUCKET,
+            "local_dir": str(_LOCAL_STORE_DIR),
+        }
+    return {
+        "backend": "filesystem",
+        "bucket": None,
+        "local_dir": str(_LOCAL_STORE_DIR),
+    }
+
+
 def upload_chunk(chunk_hash: str, data: bytes):
     """
     Store chunk in object storage backend, fallback to local filesystem.
@@ -99,21 +119,21 @@ def upload_chunk(chunk_hash: str, data: bytes):
     (_LOCAL_STORE_DIR / chunk_hash).write_bytes(payload)
 
 
-def get_chunk(chunk_hash: str) -> bytes:
+def get_chunk_raw(chunk_hash: str) -> bytes:
     """
-    Retrieve stored chunk from backend.
+    Retrieve raw stored chunk from backend without decryption.
     """
     if _s3_client is not None:
         response = _s3_client.get_object(Bucket=BUCKET, Key=chunk_hash)
         try:
-            return decrypt_chunk(response["Body"].read(), context=chunk_hash)
+            return response["Body"].read()
         finally:
             response["Body"].close()
 
     if _minio_client is not None:
         response = _minio_client.get_object(BUCKET, chunk_hash)
         try:
-            return decrypt_chunk(response.read(), context=chunk_hash)
+            return response.read()
         finally:
             response.close()
             response.release_conn()
@@ -121,7 +141,15 @@ def get_chunk(chunk_hash: str) -> bytes:
     path = _LOCAL_STORE_DIR / chunk_hash
     if not path.exists():
         raise FileNotFoundError(f"Chunk not found: {chunk_hash}")
-    return decrypt_chunk(path.read_bytes(), context=chunk_hash)
+    return path.read_bytes()
+
+
+def get_chunk(chunk_hash: str) -> bytes:
+    """
+    Retrieve stored chunk from backend.
+    """
+    raw = get_chunk_raw(chunk_hash)
+    return decrypt_chunk(raw, context=chunk_hash)
 
 
 

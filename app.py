@@ -1,18 +1,24 @@
+import base64
 import json
 import os
 from collections import Counter
-from typing import Dict, Optional
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Dict, List, Optional
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from audit_store import create_audit_challenge, quick_audit, verify_audit_challenge
 
 from attack_labeler import label_attack
-from auth import resolve_client_id, validate_api_key
+from auth import REQUIRE_API_KEY, resolve_client_id, validate_api_key
 from chunking import chunk_file
 from dedup_index import chunk_exists, decrement_chunk_ref, register_chunk
-from detector import detect_anomaly
+from detector import DETECTION_MODE, UNSUPERVISED_ANOMALY_THRESHOLD, detect_anomaly
+from encryption import encryption_status, is_encrypted_payload
 from feature_store import save_features
 from file_catalog import create_file, delete_file, get_file, list_files, update_file
 from features import extract_features
@@ -20,10 +26,17 @@ from hashing import hash_chunk
 from logger import REQUEST_LOGS, log_request
 from metrics_tools import runtime_metrics_snapshot
 from policy_engine import (
+    DEFAULT_BLOCK_THRESHOLD,
+    DEFAULT_RATE_LIMIT_THRESHOLD,
+    BLOCK_COOLDOWN_SEC,
+    RATE_LIMIT_COOLDOWN_SEC,
+    clear_policy_action,
     decide_response,
     get_active_policy_action,
     register_policy_action,
 )
+from pow import compute_proof
+from pow_session import CHALLENGE_TTL_SEC, VERIFIED_TTL_SEC
 from pow_session import consume_verified, get_or_create_challenge, verify_challenge
 from ownership_store import add_owner, is_owner, ownership_summary, remove_owner, transfer_owner
 from reputation import (
@@ -32,9 +45,16 @@ from reputation import (
     record_policy_action as record_reputation_policy_action,
     record_pow_result,
 )
-from storage import delete_chunk, get_chunk, upload_chunk
+from storage import delete_chunk, get_chunk, get_chunk_raw, storage_status, upload_chunk
 
 app = FastAPI()
+
+DEMO_MODE = os.getenv("DEMO_MODE", "true").strip().lower() in {"1", "true", "yes", "on"}
+BASE_DIR = Path(__file__).resolve().parent
+UI_DIR = BASE_DIR / "ui"
+
+if UI_DIR.exists():
+    app.mount("/ui", StaticFiles(directory=str(UI_DIR), html=True), name="ui")
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -63,6 +83,27 @@ class AuditChallengeRequest(BaseModel):
 class AuditVerifyRequest(BaseModel):
     challenge_id: str = Field(min_length=8)
     proof: str = Field(min_length=16)
+
+
+class DemoChallenge(BaseModel):
+    chunk_hash: str = Field(min_length=16)
+    challenge_id: str = Field(min_length=8)
+    nonce_hex: str = Field(min_length=16)
+    offset: int = Field(ge=0)
+    length: int = Field(ge=1)
+
+
+class DemoSolvePowRequest(BaseModel):
+    challenges: List[DemoChallenge]
+
+
+class DemoForcePolicyRequest(BaseModel):
+    client_id: str = Field(min_length=1)
+    action: str = Field(min_length=1)
+
+
+class DemoClearPolicyRequest(BaseModel):
+    client_id: str = Field(min_length=1)
 
 
 def _safe_detect(features: Dict, client_id: str) -> Dict:
@@ -198,6 +239,167 @@ def _parse_pow_proofs(raw: Optional[str]) -> Dict[str, Dict[str, str]]:
             }
 
     return parsed
+
+
+def _require_demo_mode() -> None:
+    if not DEMO_MODE:
+        raise HTTPException(status_code=404, detail={"error": "Demo mode disabled"})
+
+
+@app.get("/", include_in_schema=False)
+def demo_root():
+    if UI_DIR.exists():
+        return RedirectResponse(url="/ui/")
+    return {"status": "ok", "message": "UI assets not found. Use API endpoints instead."}
+
+
+@app.get("/demo/status")
+def demo_status():
+    storage = storage_status()
+    return {
+        "status": "ok",
+        "server_time_utc": datetime.now(timezone.utc).isoformat(),
+        "demo_mode": DEMO_MODE,
+        "auth": {"require_api_key": REQUIRE_API_KEY},
+        "storage": storage,
+        "encryption": encryption_status(),
+        "detection": {
+            "mode": DETECTION_MODE,
+            "unsupervised_threshold": UNSUPERVISED_ANOMALY_THRESHOLD,
+            "model_dir": os.getenv("MODEL_DIR", "."),
+        },
+        "policy": {
+            "rate_limit_threshold": DEFAULT_RATE_LIMIT_THRESHOLD,
+            "block_threshold": DEFAULT_BLOCK_THRESHOLD,
+            "rate_limit_cooldown_sec": RATE_LIMIT_COOLDOWN_SEC,
+            "block_cooldown_sec": BLOCK_COOLDOWN_SEC,
+        },
+        "pow": {
+            "challenge_ttl_sec": CHALLENGE_TTL_SEC,
+            "verified_ttl_sec": VERIFIED_TTL_SEC,
+        },
+    }
+
+
+@app.get("/demo/policy/{client_id}")
+def demo_policy_snapshot(
+    client_id: str,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    validate_api_key(x_api_key)
+
+    history = REQUEST_LOGS.get(client_id, [])
+    features = extract_features(history, REQUEST_LOGS) if history else {}
+    detection = _safe_detect(features, client_id=client_id) if history else {
+        "model_scores": {},
+        "is_anomaly": False,
+        "risk_score": 0.0,
+        "anomaly_votes": 0,
+        "models_considered": 0,
+        "lstm_is_anomaly": False,
+        "lstm_error": None,
+        "predicted_attack_label": "normal",
+        "class_probabilities": {},
+        "detection_mode": "insufficient_history",
+    }
+
+    policy = decide_response(detection)
+    active_policy = get_active_policy_action(client_id)
+    reputation_snapshot = get_reputation(client_id)
+
+    return {
+        "client_id": client_id,
+        "features": features,
+        "detection": detection,
+        "policy_decision": policy,
+        "active_policy": active_policy,
+        "reputation": reputation_snapshot,
+    }
+
+
+@app.post("/demo/force-policy")
+def demo_force_policy(
+    request: DemoForcePolicyRequest,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    _require_demo_mode()
+    validate_api_key(x_api_key)
+
+    action = request.action.strip().upper()
+    if action not in {"RATE_LIMIT", "BLOCK"}:
+        raise HTTPException(status_code=400, detail={"error": "action must be RATE_LIMIT or BLOCK"})
+
+    register_policy_action(request.client_id, action)
+    record_reputation_policy_action(request.client_id, action)
+    active_policy = get_active_policy_action(request.client_id)
+
+    return {
+        "client_id": request.client_id,
+        "action": action,
+        "active_policy": active_policy,
+    }
+
+
+@app.post("/demo/clear-policy")
+def demo_clear_policy(
+    request: DemoClearPolicyRequest,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    _require_demo_mode()
+    validate_api_key(x_api_key)
+
+    clear_policy_action(request.client_id)
+    return {"client_id": request.client_id, "cleared": True}
+
+
+@app.post("/demo/solve_pow")
+def demo_solve_pow(
+    request: DemoSolvePowRequest,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    _require_demo_mode()
+    validate_api_key(x_api_key)
+
+    proofs: Dict[str, Dict[str, str]] = {}
+    for challenge in request.challenges:
+        try:
+            stored_chunk = get_chunk(challenge.chunk_hash)
+        except FileNotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "Chunk not found", "chunk_hash": challenge.chunk_hash},
+            )
+        try:
+            nonce = bytes.fromhex(challenge.nonce_hex)
+        except Exception:
+            raise HTTPException(status_code=400, detail={"error": "Invalid nonce_hex"})
+
+        proof = compute_proof(stored_chunk, nonce, challenge.offset, challenge.length)
+        proofs[challenge.chunk_hash] = {
+            "challenge_id": challenge.challenge_id,
+            "proof": proof,
+        }
+
+    return {"pow_proofs": proofs}
+
+
+@app.get("/demo/chunk/{chunk_hash}")
+def demo_chunk_inspect(
+    chunk_hash: str,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    validate_api_key(x_api_key)
+    try:
+        raw = get_chunk_raw(chunk_hash)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail={"error": "Chunk not found", "chunk_hash": chunk_hash})
+    prefix = base64.b64encode(raw[:16]).decode("ascii") if raw else ""
+    return {
+        "chunk_hash": chunk_hash,
+        "raw_size": len(raw),
+        "encrypted_payload": is_encrypted_payload(raw),
+        "magic_prefix_b64": prefix,
+    }
 
 
 @app.get("/health")
