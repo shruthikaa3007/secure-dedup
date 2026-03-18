@@ -6,6 +6,8 @@ from collections import defaultdict, deque
 from pathlib import Path
 from typing import Deque, Dict
 
+from db_utils import resolve_db_file
+
 MAX_EVENTS_PER_CLIENT = int(os.getenv("MAX_EVENTS_PER_CLIENT", "5000"))
 HYDRATE_EVENT_LIMIT = int(os.getenv("HYDRATE_EVENT_LIMIT", "50000"))
 
@@ -15,7 +17,9 @@ REQUEST_LOGS: Dict[str, Deque[dict]] = defaultdict(
 )
 
 CSV_FILE = "request_logs.csv"
-DB_FILE = os.getenv("TELEMETRY_DB", "telemetry.db")
+DB_FILE = resolve_db_file(os.getenv("TELEMETRY_DB", "telemetry.db"))
+
+
 
 # CSV header
 CSV_HEADER = [

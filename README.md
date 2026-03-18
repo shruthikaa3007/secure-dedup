@@ -12,7 +12,7 @@ For quick local demo startup, use `./run_demo.sh start`.
 ## Repository organization
 
 - **Core service code**: repository root (`app.py`, `storage.py`, `detector.py`, etc.).
-- **Deployment config**: `Dockerfile`, `.dockerignore`, `render.yaml`.
+- **Deployment config**: `Dockerfile`, `.dockerignore`, `docker-compose.local.yml`, `railway.json`.
 - **Model artifacts**: `advanced_artifacts/`, `demo_artifacts/`, `extra_trees_artifacts/`, `unsupervised_artifacts/`.
 - **Project notes & reports**: `docs/project_notes/`.
 - **Generated datasets/logs**: root CSV outputs (can be relocated per your workflow).
@@ -167,71 +167,173 @@ Adaptive PoW and reputation are enabled at runtime:
 - reputation is updated from PoW verification outcomes and policy actions.
 
 
-## Deploy to Render (non-Google, free tier option)
+## Deploy in a UI cloud (Railway)
 
-This project includes a production Dockerfile and a Render Blueprint (`render.yaml`) so you can deploy without Google Cloud.
+If you want a web-UI cloud deploy, use Railway.
 
-> Free tier note: Render free web services are available in many accounts/periods, but availability and limits can change by Render policy. This repo is configured to run on Render free plan when that tier is available.
+### Steps (UI based)
 
-### Prerequisites
+1. Push this repo to GitHub.
+2. In Railway dashboard: **New Project** -> **Deploy from GitHub Repo**.
+3. Select this repository.
+4. Railway will use `Dockerfile` for build/run; `railway.json` starts `python start_server.py` explicitly.
+5. Set environment variables in Railway UI:
+   - `API_KEYS=dev-api-key`
+   - `MODEL_DIR=advanced_artifacts`
+   - `STORAGE_BACKEND=filesystem`
+   - `TELEMETRY_DB=/tmp/telemetry.db`
+   - `LOCAL_CHUNK_DIR=/tmp/local_chunks`
+   - `ADAPTIVE_POW_ENABLED=true`
+   - optional: `CHUNK_ENCRYPTION_KEY=<base64 key>`
+6. Deploy and open the generated public URL.
 
-- A Render account.
-- A connected Git repository.
-
-### Quick deploy (Blueprint)
-
-1. Push this repo to GitHub/GitLab.
-2. In Render, choose **New +** -> **Blueprint**.
-3. Select this repository; Render reads `render.yaml` and provisions `secure-dedup`.
-4. (Optional) set `CHUNK_ENCRYPTION_KEY` in Render environment variables for encrypted chunk storage.
-
-### Runtime defaults used on Render
-
+Defaults baked into Docker image:
 - `STORAGE_BACKEND=filesystem`
-- `MODEL_DIR=advanced_artifacts`
-- `TELEMETRY_DB=/var/data/telemetry.db`
-- `LOCAL_CHUNK_DIR=/var/data/local_chunks`
+- `TELEMETRY_DB=/tmp/telemetry.db`
+- `LOCAL_CHUNK_DIR=/tmp/local_chunks`
 
-A persistent disk is mounted at `/var/data`, so chunk/data state survives restarts.
-
-
-### Show adaptive PoW on Render
-
-After deploy, you can verify adaptive PoW is active:
+### Verify deployment
 
 ```bash
-BASE_URL="https://<your-render-service>.onrender.com"
-API_KEY="dev-api-key"
-CLIENT_ID="demo-client"
-
-# 1) Upload a file once (stores chunks)
-curl -fsS -X POST "$BASE_URL/upload" \
-  -H "X-API-Key: $API_KEY" \
-  -H "X-Client-ID: $CLIENT_ID" \
-  -F "file=@sample.bin"
-
-# 2) Upload same file again (duplicate) to trigger PoW challenge requirement
-curl -sS -X POST "$BASE_URL/upload" \
-  -H "X-API-Key: $API_KEY" \
-  -H "X-Client-ID: $CLIENT_ID" \
-  -F "file=@sample.bin"
-
-# 3) Request an explicit challenge
-CHUNK_HASH="<chunk-hash-from-file_recipe>"
-curl -fsS -X POST "$BASE_URL/pow/challenge" \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: $API_KEY" \
-  -H "X-Client-ID: $CLIENT_ID" \
-  -d "{"chunk_hash":"$CHUNK_HASH"}"
+curl -fsS "https://<your-railway-domain>/"
 ```
 
-In challenge responses, inspect `adaptive_profile` (`difficulty_level`, `difficulty_score`, `risk_score`, `reputation_score`) to confirm adaptive PoW decisions are active on Render.
+For a demo-friendly runtime snapshot (recent events, active client policies, and reputation):
 
-### Post-deploy smoke test
+```bash
+curl -fsS "https://<your-railway-domain>/demo/status?limit=20" | python -m json.tool
+```
+
+Adaptive PoW is visible through duplicate uploads and `/pow/challenge` response `adaptive_profile`.
+
+Swagger UI tip: open `https://<your-railway-domain>/docs`, click **Authorize**, and enter your `X-API-Key` (for example `dev-api-key`) before trying protected routes like `/upload`.
+
+For a guided UI automation flow (baseline upload, duplicate+PoW success, and PoW attack simulation), open `https://<your-railway-domain>/demo/ui`.
+
+Upload demo flow in UI (to avoid PoW form errors):
+1. First upload: leave `pow_proofs_json` empty (or set `{}`), then execute `/upload`.
+   - If Swagger shows `file_id=string`, clear it before execute (or leave it empty for new uploads).
+2. Upload same file again: you will get `409` with `required_challenges` for duplicate chunks.
+3. Call `/pow/verify` (or provide valid `pow_proofs_json`) and retry `/upload`.
+4. Use `/demo/status` to show recent upload + PoW events live.
+
+
+### If Railway shows healthcheck failure (concrete fix)
+
+
+### If Railway says `Failed to parse JSON file railway.json`
+
+Use this exact validation command before pushing:
+
+```bash
+python -m json.tool railway.json
+```
+
+If it fails, replace `railway.json` with the current repository version (strict JSON with double-quoted keys).
+
+
+Use this exact setup:
+
+1. In Railway **Settings -> Healthcheck Path**, set it to `/` (root).
+
+2. Keep `/health` for automated probes, and use `/demo/status` during demos to show what the service is doing in near real time.
+3. In Railway **Settings -> Start Command**, set `python start_server.py` (or keep repo `railway.json` command).
+4. Ensure these env vars exist:
+   - `API_KEYS=dev-api-key`
+   - `MODEL_DIR=advanced_artifacts`
+   - `STORAGE_BACKEND=filesystem`
+   - `TELEMETRY_DB=/tmp/telemetry.db`
+   - `LOCAL_CHUNK_DIR=/tmp/local_chunks`
+5. Redeploy from latest commit.
+6. In Railway **Deployments -> Logs**, confirm process starts and binds to a port.
+7. Check logs for a line like: `Uvicorn running on http://0.0.0.0:<port>`.
+8. Verify both endpoints:
+
+```bash
+curl -fsS "https://<your-railway-domain>/"
+curl -fsS "https://<your-railway-domain>/health"
+```
+
+If your logs include `PermissionError: [Errno 13]` for `/var/data/local_chunks`, set `LOCAL_CHUNK_DIR=/tmp/local_chunks` and redeploy.
+
+If your logs include `sqlite3.OperationalError: unable to open database file`, set `TELEMETRY_DB=/tmp/telemetry.db` and redeploy.
+
+If this still fails in your Railway workspace, use Render UI flow below (same Docker image).
+
+## Alternative easy UI cloud: Render Web Service
+
+If Railway health checks still fail in your account/project, use Render (Web Service) directly from UI:
+
+1. Push repo to GitHub.
+2. In Render: **New +** -> **Web Service** -> select repo.
+3. Runtime: Docker (Render auto-detects `Dockerfile`).
+4. Set health check path to `/health` (or `/`, both are supported).
+5. Add env vars:
+   - `API_KEYS=dev-api-key`
+   - `MODEL_DIR=advanced_artifacts`
+   - `STORAGE_BACKEND=filesystem`
+   - `TELEMETRY_DB=/tmp/telemetry.db`
+   - `LOCAL_CHUNK_DIR=/tmp/local_chunks`
+   - `ADAPTIVE_POW_ENABLED=true`
+6. Deploy, then verify:
 
 ```bash
 curl -fsS "https://<your-render-service>.onrender.com/health"
 ```
+
+## Concrete deployment checklist (works path)
+
+Use this exact order:
+
+1. Confirm `Dockerfile` exists and unchanged.
+2. Push latest commit to GitHub.
+3. Connect repo in Railway UI.
+4. Set env vars exactly as documented.
+5. Set Start Command to `python start_server.py` (or keep repo `railway.json`).
+6. Set Healthcheck path to `/health` (or `/` if required by platform behavior).
+7. Deploy and verify `/` and `/health`.
+
+## Run with Docker locally
+
+### Prerequisites
+
+- Docker + Docker Compose
+- Python virtualenv with project dependencies installed
+
+### Start everything
+
+```bash
+./run_demo.sh start
+```
+
+This starts Redis + LocalStack (if Docker is available) and then runs the API with adaptive PoW enabled by default.
+
+### Show adaptive PoW locally
+
+```bash
+BASE_URL="http://127.0.0.1:8000"
+API_KEY="dev-api-key"
+CLIENT_ID="demo-client"
+
+# 1) Upload once
+curl -fsS -X POST "$BASE_URL/upload"   -H "X-API-Key: $API_KEY"   -H "X-Client-ID: $CLIENT_ID"   -F "file=@sample.bin"
+
+# 2) Upload same file again (duplicate path)
+curl -sS -X POST "$BASE_URL/upload"   -H "X-API-Key: $API_KEY"   -H "X-Client-ID: $CLIENT_ID"   -F "file=@sample.bin"
+
+# 3) Request challenge directly for one duplicate chunk hash
+CHUNK_HASH="<chunk-hash-from-file_recipe>"
+curl -fsS -X POST "$BASE_URL/pow/challenge"   -H "Content-Type: application/json"   -H "X-API-Key: $API_KEY"   -H "X-Client-ID: $CLIENT_ID"   -d "{"chunk_hash":"$CHUNK_HASH"}"
+```
+
+Inspect `challenge.adaptive_profile` to confirm adaptive PoW difficulty is active.
+
+### Smoke test
+
+```bash
+./run_demo.sh test
+```
+
 
 ## Base-paper alignment upgrades
 
@@ -280,6 +382,12 @@ Example runtime config:
 export CHUNK_ENCRYPTION_KEY="<base64-32-byte-key>"
 ```
 
+Demo proof in UI/API:
+
+1. Upload a file once (`POST /upload`) with API key + client ID.
+2. Call `GET /demo/encryption` to show runtime encryption flags.
+3. Copy one `chunk_hash` from upload response and call `GET /demo/encryption?chunk_hash=<hash>` to show `encrypted_envelope: true` for stored chunk payloads.
+
 
 ## What happens if two files are similar but slightly different?
 
@@ -316,7 +424,7 @@ This project now implements an end-to-end secure dedup pipeline that is close to
    - reputation-aware adaptive PoW difficulty
 
 6. **Cloud deployment path**
-   - Dockerfile + Render Blueprint for non-Google free-tier-friendly hosting
+   - Dockerfile + local Docker Compose stack (`run_demo.sh`)
 
 In practice, users should expect:
 - first upload stores new encrypted chunks (if encryption key configured),
@@ -325,6 +433,25 @@ In practice, users should expect:
 - owners can audit chunk integrity and transfer ownership,
 - suspicious clients are automatically rate-limited/blocked by policy.
 
+
+## Is the project complete?
+
+For a thesis/demo prototype: **yes, functionally complete**.
+
+Implemented end-to-end:
+- secure dedup + PoW duplicate ownership verification
+- adaptive PoW (risk + reputation aware)
+- file versioning and lifecycle
+- ownership and transfer tracking
+- chunk audit challenge/verify
+- encryption-at-rest for chunks
+- runtime metrics and benchmark graph generation
+
+For production-hardening, still recommended:
+- migration/versioning for DB schema,
+- API rate limiting at gateway level,
+- stronger auth/tenant isolation and secret management,
+- automated integration tests in CI/CD.
 
 ## Runtime metrics and test graphs
 

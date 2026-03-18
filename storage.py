@@ -2,7 +2,7 @@ import os
 from io import BytesIO
 from pathlib import Path
 
-from encryption import decrypt_chunk, encrypt_chunk
+from encryption import decrypt_chunk, encrypt_chunk, payload_uses_envelope
 
 try:
     import boto3
@@ -31,6 +31,23 @@ MINIO_SECURE = os.getenv("MINIO_SECURE", "false").lower() == "true"
 BUCKET = os.getenv("S3_BUCKET", os.getenv("MINIO_BUCKET", "chunks"))
 
 _LOCAL_STORE_DIR = Path(os.getenv("LOCAL_CHUNK_DIR", "local_chunks"))
+
+
+def _init_local_store_dir() -> Path:
+    preferred = _LOCAL_STORE_DIR
+    fallback = Path("/tmp/local_chunks")
+
+    for candidate in (preferred, fallback):
+        try:
+            candidate.mkdir(parents=True, exist_ok=True)
+            return candidate
+        except OSError:
+            continue
+
+    # Last-resort fallback to repository-relative path.
+    final_fallback = Path("local_chunks")
+    final_fallback.mkdir(parents=True, exist_ok=True)
+    return final_fallback
 
 _s3_client = None
 if STORAGE_BACKEND in {"auto", "localstack", "s3"} and boto3 is not None:
@@ -68,7 +85,7 @@ if _s3_client is None and STORAGE_BACKEND in {"auto", "minio"} and Minio is not 
         _minio_client = None
 
 if _s3_client is None and _minio_client is None:
-    _LOCAL_STORE_DIR.mkdir(parents=True, exist_ok=True)
+    _LOCAL_STORE_DIR = _init_local_store_dir()
 
 
 def storage_status() -> dict:
@@ -174,3 +191,49 @@ def delete_chunk(chunk_hash: str) -> None:
     path = _LOCAL_STORE_DIR / chunk_hash
     if path.exists():
         path.unlink()
+
+
+def get_chunk_envelope_info(chunk_hash: str):
+    """Inspect stored payload envelope without decrypting chunk contents."""
+    if _s3_client is not None:
+        response = _s3_client.get_object(Bucket=BUCKET, Key=chunk_hash)
+        try:
+            payload = response["Body"].read()
+        except Exception as exc:
+            raise FileNotFoundError(f"Chunk not found: {chunk_hash}") from exc
+        finally:
+            response["Body"].close()
+        return {
+            "backend": "s3",
+            "exists": True,
+            "encrypted_envelope": payload_uses_envelope(payload),
+            "stored_size": len(payload),
+        }
+
+    if _minio_client is not None:
+        try:
+            response = _minio_client.get_object(BUCKET, chunk_hash)
+        except Exception as exc:
+            raise FileNotFoundError(f"Chunk not found: {chunk_hash}") from exc
+        try:
+            payload = response.read()
+        finally:
+            response.close()
+            response.release_conn()
+        return {
+            "backend": "minio",
+            "exists": True,
+            "encrypted_envelope": payload_uses_envelope(payload),
+            "stored_size": len(payload),
+        }
+
+    path = _LOCAL_STORE_DIR / chunk_hash
+    if not path.exists():
+        raise FileNotFoundError(f"Chunk not found: {chunk_hash}")
+    payload = path.read_bytes()
+    return {
+        "backend": "filesystem",
+        "exists": True,
+        "encrypted_envelope": payload_uses_envelope(payload),
+        "stored_size": len(payload),
+    }

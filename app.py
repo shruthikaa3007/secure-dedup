@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import time
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +21,7 @@ from dedup_index import chunk_exists, decrement_chunk_ref, register_chunk
 from detector import DETECTION_MODE, UNSUPERVISED_ANOMALY_THRESHOLD, detect_anomaly
 from encryption import encryption_status, is_encrypted_payload
 from feature_store import save_features
+from encryption import encryption_enabled
 from file_catalog import create_file, delete_file, get_file, list_files, update_file
 from features import extract_features
 from hashing import hash_chunk
@@ -215,13 +217,20 @@ def _enforce_pre_request_policy(client_id: str) -> None:
 
 
 def _parse_pow_proofs(raw: Optional[str]) -> Dict[str, Dict[str, str]]:
-    if not raw:
+    normalized = _normalize_optional_form_value(raw)
+    if not normalized or normalized.lower() == "string":
         return {}
 
     try:
-        data = json.loads(raw)
+        data = json.loads(normalized)
     except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=400, detail={"error": f"Invalid pow_proofs_json: {exc}"})
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": f"Invalid pow_proofs_json: {exc}",
+                "hint": "Leave pow_proofs_json empty for first upload, or send valid JSON like {}",
+            },
+        )
 
     if not isinstance(data, dict):
         raise HTTPException(status_code=400, detail={"error": "pow_proofs_json must be an object"})
@@ -412,13 +421,258 @@ def metrics():
     return {"status": "ok", "metrics": runtime_metrics_snapshot()}
 
 
+@app.get("/demo/encryption")
+def demo_encryption(
+    chunk_hash: Optional[str] = None,
+    api_key: str = Depends(_require_api_key),
+    x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
+):
+    client_id = resolve_client_id(x_client_id, chunk_hash or "demo-encryption", api_key)
+
+    result = {
+        "status": "ok",
+        "client_id": client_id,
+        "encryption_enabled": encryption_enabled(),
+        "strict_mode": os.getenv("CHUNK_ENCRYPTION_STRICT", "false").strip().lower() in {"1", "true", "yes", "on"},
+        "segment_size": os.getenv("CHUNK_ENCRYPTION_SEGMENT_SIZE", "4096"),
+    }
+
+    if chunk_hash:
+        if not is_owner(chunk_hash, client_id):
+            raise HTTPException(status_code=403, detail={"error": "Only owners can inspect chunk encryption", "chunk_hash": chunk_hash})
+        try:
+            result["chunk"] = {
+                "chunk_hash": chunk_hash,
+                **get_chunk_envelope_info(chunk_hash),
+            }
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail={"error": "Chunk not found", "chunk_hash": chunk_hash})
+
+    return result
+
+
+@app.get("/demo/status")
+def demo_status(limit: int = 20):
+    bounded_limit = max(1, min(100, int(limit)))
+
+    clients = []
+    events = []
+    for client_id, history in REQUEST_LOGS.items():
+        if not history:
+            continue
+        latest_event = history[-1]
+        clients.append(
+            {
+                "client_id": client_id,
+                "request_count": len(history),
+                "last_event_ts": latest_event.get("timestamp"),
+                "active_policy": get_active_policy_action(client_id),
+                "reputation": get_reputation(client_id),
+            }
+        )
+        for item in list(history)[-bounded_limit:]:
+            events.append(
+                {
+                    "client_id": client_id,
+                    "timestamp": item.get("timestamp"),
+                    "operation_type": item.get("operation_type"),
+                    "chunk_hash": item.get("chunk_hash"),
+                    "pow_result": item.get("pow_result"),
+                }
+            )
+
+    clients.sort(key=lambda item: item.get("last_event_ts") or 0.0, reverse=True)
+    events.sort(key=lambda item: item.get("timestamp") or 0.0, reverse=True)
+
+    return {
+        "status": "ok",
+        "service": "secure-dedup",
+        "server_time": time.time(),
+        "summary": {
+            "active_clients": len(clients),
+            "total_buffered_events": sum(len(history) for history in REQUEST_LOGS.values()),
+            "recent_operation_types": Counter(
+                event["operation_type"] for event in events if event.get("operation_type")
+            ),
+        },
+        "clients": clients[:bounded_limit],
+        "recent_events": events[:bounded_limit],
+    }
+
+
+@app.get("/demo/ui", response_class=HTMLResponse)
+def demo_ui():
+    return """
+<!doctype html>
+<html>
+<head>
+  <meta charset=\"utf-8\" />
+  <title>Secure Dedup Demo UI</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; background: #f7f7fb; color: #222; }
+    .card { background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+    input, textarea { width: 100%; padding: 8px; margin: 6px 0 12px; }
+    button { margin-right: 8px; margin-bottom: 8px; padding: 8px 12px; }
+    pre { background: #111827; color: #d1fae5; padding: 12px; border-radius: 8px; overflow: auto; max-height: 400px; }
+    .ok { color: #065f46; }
+    .warn { color: #92400e; }
+  </style>
+</head>
+<body>
+  <h1>Secure Dedup Demo UI</h1>
+  <p>Run automated upload + PoW flows and inspect live runtime behavior without manually crafting JSON.</p>
+
+  <div class=\"card\">
+    <label>API Key</label>
+    <input id=\"apiKey\" value=\"dev-api-key\" />
+    <label>Client ID</label>
+    <input id=\"clientId\" value=\"demo-ui-client\" />
+    <label>Demo File Content (keep short for single-chunk PoW demo)</label>
+    <textarea id=\"content\" rows=\"4\">secure dedup demo content</textarea>
+    <button onclick=\"runBaseline()\">1) Baseline upload</button>
+    <button onclick=\"runDuplicatePowSuccess()\">2) Duplicate + PoW success</button>
+    <button onclick=\"runPowAttackScenario()\">3) Attack scenario (bad PoW)</button>
+    <button onclick=\"refreshObservability()\">Refresh metrics + demo status</button>
+  </div>
+
+  <div class=\"card\">
+    <h3>Observability</h3>
+    <pre id=\"obs\">(metrics/demo status will appear here)</pre>
+  </div>
+
+  <div class=\"card\">
+    <h3>Scenario log</h3>
+    <pre id=\"log\">(scenario steps will appear here)</pre>
+  </div>
+
+<script>
+const logEl = document.getElementById('log');
+const obsEl = document.getElementById('obs');
+
+function headers() {
+  return {
+    'X-API-Key': document.getElementById('apiKey').value,
+    'X-Client-ID': document.getElementById('clientId').value,
+  };
+}
+
+function appendLog(message, data) {
+  const line = data ? `${message}\n${JSON.stringify(data, null, 2)}\n` : `${message}\n`;
+  logEl.textContent += line + '\n';
+}
+
+function filePayload() {
+  return new TextEncoder().encode(document.getElementById('content').value);
+}
+
+async function sha256Hex(bytes) {
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function computePowProof(challenge, contentBytes) {
+  const nonce = Uint8Array.from(challenge.nonce_hex.match(/.{1,2}/g).map(x => parseInt(x, 16)));
+  const offset = challenge.offset;
+  const length = challenge.length;
+  const partial = contentBytes.slice(offset, offset + length);
+  const joined = new Uint8Array(nonce.length + partial.length);
+  joined.set(nonce, 0);
+  joined.set(partial, nonce.length);
+  return sha256Hex(joined);
+}
+
+async function uploadOnce(powProofs = {}, fileId = '') {
+  const data = filePayload();
+  const form = new FormData();
+  form.append('file', new Blob([data]), 'demo-ui.txt');
+  form.append('pow_proofs_json', JSON.stringify(powProofs));
+  if (fileId) form.append('file_id', fileId);
+  const res = await fetch('/upload', { method: 'POST', headers: headers(), body: form });
+  const body = await res.json();
+  return { status: res.status, body, contentBytes: data };
+}
+
+async function runBaseline() {
+  logEl.textContent = '';
+  appendLog('Running baseline upload...');
+  const result = await uploadOnce();
+  appendLog(`Upload status ${result.status}`, result.body);
+  await refreshObservability();
+}
+
+async function runDuplicatePowSuccess() {
+  logEl.textContent = '';
+  appendLog('Step 1: first upload');
+  const first = await uploadOnce();
+  appendLog(`First upload status ${first.status}`, first.body);
+
+  appendLog('Step 2: duplicate upload to get PoW challenge');
+  const second = await uploadOnce();
+  appendLog(`Second upload status ${second.status}`, second.body);
+  if (second.status !== 409) {
+    appendLog('Expected 409 duplicate PoW challenge but got different response.');
+    await refreshObservability();
+    return;
+  }
+
+  const required = second.body?.detail?.required_challenges || [];
+  const powProofs = {};
+  for (const challenge of required) {
+    const proof = await computePowProof(challenge, second.contentBytes);
+    powProofs[challenge.chunk_hash] = { challenge_id: challenge.challenge_id, proof };
+  }
+
+  appendLog('Step 3: retry upload with computed PoW proof', powProofs);
+  const third = await uploadOnce(powProofs);
+  appendLog(`Third upload status ${third.status}`, third.body);
+  await refreshObservability();
+}
+
+async function runPowAttackScenario() {
+  logEl.textContent = '';
+  appendLog('Attack scenario: submit invalid PoW to show protection path.');
+  await uploadOnce();
+  const second = await uploadOnce();
+  appendLog(`Challenge trigger status ${second.status}`, second.body);
+  const required = second.body?.detail?.required_challenges || [];
+  if (!required.length) {
+    appendLog('No challenge returned; nothing to attack in this run.');
+    await refreshObservability();
+    return;
+  }
+
+  const badProofs = {};
+  for (const challenge of required) {
+    badProofs[challenge.chunk_hash] = { challenge_id: challenge.challenge_id, proof: 'deadbeef' };
+  }
+
+  const attackTry = await uploadOnce(badProofs);
+  appendLog(`Attack retry status ${attackTry.status}`, attackTry.body);
+  appendLog('Expected behavior: server refuses bad proof and keeps requiring valid PoW.');
+  await refreshObservability();
+}
+
+async function refreshObservability() {
+  const [metricsRes, statusRes] = await Promise.all([
+    fetch('/metrics'),
+    fetch('/demo/status?limit=20'),
+  ]);
+  const metrics = await metricsRes.json();
+  const status = await statusRes.json();
+  obsEl.textContent = JSON.stringify({ metrics, status }, null, 2);
+}
+</script>
+</body>
+</html>
+    """
+
+
 @app.post("/pow/challenge")
 def create_pow_challenge(
     request: PowChallengeRequest,
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    api_key: str = Depends(_require_api_key),
     x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
 ):
-    api_key = validate_api_key(x_api_key)
     client_id = resolve_client_id(x_client_id, request.chunk_hash, api_key)
 
     if not chunk_exists(request.chunk_hash):
@@ -447,10 +701,9 @@ def create_pow_challenge(
 @app.post("/pow/verify")
 def verify_pow(
     request: PowVerifyRequest,
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    api_key: str = Depends(_require_api_key),
     x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
 ):
-    api_key = validate_api_key(x_api_key)
     client_id = resolve_client_id(x_client_id, request.chunk_hash, api_key)
 
     if not chunk_exists(request.chunk_hash):
@@ -495,12 +748,17 @@ def verify_pow(
 @app.post("/upload")
 async def upload_file(
     file: UploadFile = File(...),
-    pow_proofs_json: Optional[str] = Form(default=None),
-    file_id: Optional[str] = Form(default=None),
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    pow_proofs_json: Optional[str] = Form(
+        default=None,
+        description=(
+            "Optional JSON map of duplicate chunk proofs. "
+            "Leave empty for first upload. Example: {\"<chunk_hash>\": {\"challenge_id\": \"...\", \"proof\": \"...\"}}"
+        ),
+    ),
+    file_id: Optional[str] = Form(default=None, description="Optional existing file ID for version update. Leave empty for new uploads."),
+    api_key: str = Depends(_require_api_key),
     x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
 ):
-    api_key = validate_api_key(x_api_key)
     client_id = resolve_client_id(x_client_id, file.filename, api_key)
     _enforce_pre_request_policy(client_id)
 
@@ -584,15 +842,16 @@ async def upload_file(
 
     # Optional data-dynamics context: update an existing file version instead of creating a new one.
     previous_recipe = []
-    if file_id:
+    normalized_file_id = _normalize_optional_form_value(file_id)
+    if normalized_file_id:
         try:
-            existing = get_file(file_id)
+            existing = get_file(normalized_file_id)
         except KeyError:
-            raise HTTPException(status_code=404, detail={"error": "File not found", "file_id": file_id})
+            raise HTTPException(status_code=404, detail={"error": "File not found", "file_id": normalized_file_id})
         if existing["owner_client_id"] != client_id:
-            raise HTTPException(status_code=403, detail={"error": "Only file owner can update", "file_id": file_id})
+            raise HTTPException(status_code=403, detail={"error": "Only file owner can update", "file_id": normalized_file_id})
         if existing["status"] != "active":
-            raise HTTPException(status_code=409, detail={"error": "File is deleted", "file_id": file_id})
+            raise HTTPException(status_code=409, detail={"error": "File is deleted", "file_id": normalized_file_id})
         previous_recipe = list(existing.get("recipe", []))
 
     # Phase 2: perform dedup processing for the new version recipe.
@@ -646,8 +905,8 @@ async def upload_file(
                     delete_chunk(old_hash)
                 remove_owner(old_hash, client_id)
 
-    if file_id:
-        file_record = update_file(file_id, client_id, recipe, file_name=safe_name)
+    if normalized_file_id:
+        file_record = update_file(normalized_file_id, client_id, recipe, file_name=safe_name)
     else:
         file_record = create_file(client_id, safe_name, recipe)
 
@@ -692,10 +951,9 @@ async def upload_file(
 
 @app.get("/files")
 def get_my_files(
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    api_key: str = Depends(_require_api_key),
     x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
 ):
-    api_key = validate_api_key(x_api_key)
     client_id = resolve_client_id(x_client_id, "files", api_key)
     return {"client_id": client_id, "files": list_files(client_id)}
 
@@ -703,10 +961,9 @@ def get_my_files(
 @app.get("/files/{file_id}")
 def get_file_by_id(
     file_id: str,
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    api_key: str = Depends(_require_api_key),
     x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
 ):
-    api_key = validate_api_key(x_api_key)
     client_id = resolve_client_id(x_client_id, file_id, api_key)
     try:
         record = get_file(file_id)
@@ -720,10 +977,9 @@ def get_file_by_id(
 @app.delete("/files/{file_id}")
 def delete_file_by_id(
     file_id: str,
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    api_key: str = Depends(_require_api_key),
     x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
 ):
-    api_key = validate_api_key(x_api_key)
     client_id = resolve_client_id(x_client_id, file_id, api_key)
     try:
         record = delete_file(file_id, client_id)
@@ -744,10 +1000,9 @@ def delete_file_by_id(
 @app.get("/ownership/{chunk_hash}")
 def get_chunk_ownership(
     chunk_hash: str,
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    api_key: str = Depends(_require_api_key),
     x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
 ):
-    api_key = validate_api_key(x_api_key)
     client_id = resolve_client_id(x_client_id, chunk_hash, api_key)
     if not is_owner(chunk_hash, client_id):
         raise HTTPException(status_code=403, detail={"error": "Not an owner", "chunk_hash": chunk_hash})
@@ -757,10 +1012,9 @@ def get_chunk_ownership(
 @app.post("/ownership/transfer")
 def transfer_chunk_ownership(
     request: OwnershipTransferRequest,
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    api_key: str = Depends(_require_api_key),
     x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
 ):
-    api_key = validate_api_key(x_api_key)
     client_id = resolve_client_id(x_client_id, request.chunk_hash, api_key)
     if not is_owner(request.chunk_hash, client_id):
         raise HTTPException(status_code=403, detail={"error": "Only owner can transfer", "chunk_hash": request.chunk_hash})
@@ -772,10 +1026,9 @@ def transfer_chunk_ownership(
 @app.post("/audit/challenge")
 def create_chunk_audit(
     request: AuditChallengeRequest,
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    api_key: str = Depends(_require_api_key),
     x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
 ):
-    api_key = validate_api_key(x_api_key)
     client_id = resolve_client_id(x_client_id, request.chunk_hash, api_key)
     if not is_owner(request.chunk_hash, client_id):
         raise HTTPException(status_code=403, detail={"error": "Only owners can audit", "chunk_hash": request.chunk_hash})
@@ -790,9 +1043,9 @@ def create_chunk_audit(
 @app.post("/audit/verify")
 def verify_chunk_audit(
     request: AuditVerifyRequest,
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    api_key: str = Depends(_require_api_key),
 ):
-    validate_api_key(x_api_key)
+    _ = api_key
     try:
         result = verify_audit_challenge(request.challenge_id, request.proof)
     except KeyError:
@@ -803,10 +1056,9 @@ def verify_chunk_audit(
 @app.get("/audit/quick/{chunk_hash}")
 def quick_chunk_audit(
     chunk_hash: str,
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    api_key: str = Depends(_require_api_key),
     x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
 ):
-    api_key = validate_api_key(x_api_key)
     client_id = resolve_client_id(x_client_id, chunk_hash, api_key)
     if not is_owner(chunk_hash, client_id):
         raise HTTPException(status_code=403, detail={"error": "Only owners can audit", "chunk_hash": chunk_hash})
