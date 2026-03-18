@@ -8,6 +8,91 @@ Secure deduplication prototype with:
 For setup on a new machine, see `docs/project_notes/NEW_LAPTOP_SETUP.md`.
 For quick local demo startup, use `./run_demo.sh start`.
 
+## Table of contents
+
+- [Project objective](#project-objective)
+- [System architecture](#system-architecture)
+- [Methodology](#methodology)
+- [Key results](#key-results)
+- [Repository organization](#repository-organization)
+- [Training workflow (optimized)](#training-workflow-optimized)
+- [Runtime detection behavior](#runtime-detection-behavior)
+- [End-to-end demo playbook (UI and API)](#end-to-end-demo-playbook-ui-and-api)
+- [Scenario playbooks](#scenario-playbooks)
+- [Deploy in a UI cloud (Railway)](#deploy-in-a-ui-cloud-railway)
+- [Run with Docker locally](#run-with-docker-locally)
+- [Runtime metrics and test graphs](#runtime-metrics-and-test-graphs)
+- [Runtime configuration](#runtime-configuration)
+
+## Project objective
+
+Build and validate a secure chunk-level deduplication system that keeps storage efficiency while reducing abuse risk.
+
+Primary goals:
+- Preserve dedup benefits for benign users.
+- Require proof-of-ownership for duplicate chunk claims.
+- Detect suspicious behavior from request patterns.
+- Enforce adaptive policy (`ALLOW`, `RATE_LIMIT`, `BLOCK`) and adaptive PoW difficulty.
+- Provide auditability, ownership lifecycle, and reproducible demo/test workflows.
+
+## System architecture
+
+The implementation follows a layered architecture that maps to `architecture.drawio` and is explained in `docs/project_notes/ARCHITECTURE_EXPLANATION.md`.
+
+Runtime path (online):
+- API ingress (`app.py`) with authenticated client identity (`X-API-Key`, `X-Client-ID`).
+- Chunking + fingerprinting (`chunking.py`, `hashing.py`) and dedup index (`dedup_index.py`).
+- Storage backends (`storage.py`) with optional encryption-at-rest (`encryption.py`).
+- Duplicate-claim verification via challenge-based PoW (`pow_session.py`, `pow.py`, `/pow/*`, `/upload`).
+- Adaptive policy loop using behavior features (`features.py`), detector (`detector.py`), policy engine (`policy_engine.py`), and reputation (`reputation.py`).
+- Durable telemetry + metrics (`logger.py`, `feature_store.py`, `metrics_tools.py`).
+
+Data/control stores:
+- Chunk object storage (filesystem / LocalStack S3 / MinIO / S3).
+- Fingerprint/ref-count index.
+- SQLite telemetry (`TELEMETRY_DB`) for events, feature snapshots, file versions, and ownership events.
+
+Lifecycle controls:
+- File versioning and updates (`file_catalog.py`, `/files*`).
+- Ownership transfer (`ownership_store.py`, `/ownership/*`).
+- Integrity audit challenge/verify (`audit_store.py`, `/audit/*`).
+
+## Methodology
+
+1. Data and feature engineering
+- Convert/prepare request logs and derive behavioral features (`prepare_training_data.py`, `features.py`).
+- Label attack patterns using rules (`attack_labeler.py`) to bootstrap supervised learning.
+
+2. Model training and selection
+- Train supervised models when labels are trainable; fallback to unsupervised ensemble otherwise (`train_model.py`).
+- Compare candidate classifiers with CV and select best by macro-F1.
+- Persist artifacts and evaluation reports (`training_metrics.json`, `evaluation_report.json/.md`).
+
+3. Adaptive control design
+- Map detector risk + client reputation into policy decisions and PoW difficulty.
+- Keep a challenge-based duplicate flow so legitimate clients can still proceed.
+
+4. System validation
+- API smoke validation and scenario tests (upload, duplicate challenge, solve, retry, metrics, UI hooks).
+- Reproducible report generation through `tests/run_smoke_tests.py`.
+
+## Key results
+
+Modeling results (from `advanced_artifacts/training_metrics.json`):
+- Dataset rows: `103` (train `77`, test `26`), 4 classes.
+- Best model: `random_forest` with CV macro-F1 `0.9484`.
+- Test accuracy: `0.9615`.
+- Macro-F1: `0.8889`, weighted-F1: `0.9573`.
+
+Adaptive PoW comparison (from `pow_comparison_summary.json`):
+- Mean estimated attacker success on anomaly rows reduced from `1.0000` to `0.4735`.
+- Relative reduction: `52.65%`.
+- Benign proof-length overhead (normal rows): `58.09%`.
+- Adaptive difficulty distribution: `hardened=68`, `elevated=18`, `normal=17`.
+
+Current smoke validation (from `test_reports/smoke_test_report_20260318_120635.md`):
+- `7/7` smoke test cases passed (health, config, upload, duplicate PoW, solve+retry, status/metrics, UI hooks).
+
 
 ## Repository organization
 
@@ -166,6 +251,127 @@ Adaptive PoW and reputation are enabled at runtime:
 - difficulty selection uses detector-derived risk and client reputation,
 - reputation is updated from PoW verification outcomes and policy actions.
 
+## End-to-end demo playbook (UI and API)
+
+### A) Guided UI demo (recommended)
+
+1. Open `https://<your-railway-domain>/ui/`.
+2. Set:
+   - API key: `dev-api-key` (or your configured key),
+   - Client ID: use a fresh value per demo (for example `demo-<timestamp>`),
+   - Policy Client ID: same as Client ID.
+3. Click `Refresh Overview`.
+4. Click `Run Full Demo Story`.
+5. Narrate the flow:
+   - baseline upload success,
+   - duplicate upload triggers PoW challenge,
+   - PoW solved and retry succeeds,
+   - optional bad-proof attack path.
+6. In parallel tabs, show:
+   - `/health`
+   - `/demo/status?limit=20`
+   - `/metrics`
+
+If duplicate upload returns `429` instead of `409`:
+1. Click `Clear Policy`.
+2. Re-run duplicate step.
+3. Continue with solve+retry.
+
+### B) API demo flow (curl)
+
+```bash
+BASE_URL="https://<your-railway-domain>"
+API_KEY="dev-api-key"
+CLIENT_ID="demo-$(date +%s)"
+echo "secure dedup demo payload" > demo.txt
+
+# 1) Baseline upload
+curl -fsS -X POST "$BASE_URL/upload" \
+  -H "X-API-Key: $API_KEY" \
+  -H "X-Client-ID: $CLIENT_ID" \
+  -F "file=@demo.txt"
+
+# 2) Duplicate upload (expect 409 + required_challenges)
+curl -sS -X POST "$BASE_URL/upload" \
+  -H "X-API-Key: $API_KEY" \
+  -H "X-Client-ID: $CLIENT_ID" \
+  -F "file=@demo.txt"
+```
+
+Then either:
+- Solve via `/demo/solve_pow` and retry `/upload` with `pow_proofs_json`, or
+- Use `/pow/challenge` + `/pow/verify` endpoint pair for explicit challenge verification.
+
+## Scenario playbooks
+
+### Scenario 1: Duplicate ownership verification
+
+Goal:
+- Show that duplicate claims require proof, not just matching hash requests.
+
+Steps:
+1. Upload file once (`/upload`) -> success.
+2. Upload same file again -> `409` with `required_challenges`.
+3. Solve/verify challenge and retry -> success.
+
+Expected demo message:
+- Dedup remains efficient, but duplicate path is protected by PoW.
+
+### Scenario 2: Policy enforcement (rate-limit/block)
+
+Goal:
+- Show adaptive defense actions.
+
+Steps:
+1. Use `/demo/force-policy` with `RATE_LIMIT` and same client ID.
+2. Upload again -> expect `429`.
+3. Use `/demo/force-policy` with `BLOCK`.
+4. Upload again -> expect `403`.
+5. Use `/demo/clear-policy` and verify normal flow resumes.
+
+### Scenario 3: File lifecycle and versioning
+
+Goal:
+- Show update/delete semantics with chunk ref-count reconciliation.
+
+Steps:
+1. Upload new file -> capture `file.file_id`.
+2. Upload updated content with `file_id=<captured_id>` form field.
+3. Query `/files` and `/files/{file_id}` to show version increments.
+4. Delete via `/files/{file_id}` and verify status transitions.
+
+### Scenario 4: Ownership transfer
+
+Goal:
+- Demonstrate secure owner tracking and transfer events.
+
+Steps:
+1. Identify a chunk hash from upload response.
+2. Call `/ownership/{chunk_hash}` as current owner.
+3. Transfer with `/ownership/transfer`.
+4. Re-check ownership summary.
+
+### Scenario 5: Cloud integrity audit
+
+Goal:
+- Prove auditable integrity of stored chunks.
+
+Steps:
+1. Create challenge via `/audit/challenge`.
+2. Verify with `/audit/verify`.
+3. Optionally show `/audit/quick/{chunk_hash}`.
+
+### Scenario 6: Encryption-at-rest proof
+
+Goal:
+- Show stored payloads are envelope-encrypted when key is configured.
+
+Steps:
+1. Set `CHUNK_ENCRYPTION_KEY` in runtime env.
+2. Upload sample file.
+3. Call `/demo/encryption`.
+4. Call `/demo/encryption?chunk_hash=<hash>` and verify `encrypted_envelope: true`.
+
 
 ## Deploy in a UI cloud (Railway)
 
@@ -208,7 +414,7 @@ Adaptive PoW is visible through duplicate uploads and `/pow/challenge` response 
 
 Swagger UI tip: open `https://<your-railway-domain>/docs`, click **Authorize**, and enter your `X-API-Key` (for example `dev-api-key`) before trying protected routes like `/upload`.
 
-For a guided UI automation flow (baseline upload, duplicate+PoW success, and PoW attack simulation), open `https://<your-railway-domain>/demo/ui`.
+For a guided UI automation flow (baseline upload, duplicate+PoW success, and PoW attack simulation), open `https://<your-railway-domain>/ui/`.
 
 Upload demo flow in UI (to avoid PoW form errors):
 1. First upload: leave `pow_proofs_json` empty (or set `{}`), then execute `/upload`.
