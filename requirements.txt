@@ -11,3 +11,4 @@ numpy
 scikit-learn==1.7.2
 joblib
 pycryptodome
+requests

@@ -3,89 +3,77 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Secure Dedup Live Demo</title>
+    <title>Secure Dedup Step Demo</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="orb orb-1"></div>
-    <div class="orb orb-2"></div>
-    <div class="orb orb-3"></div>
-    <main class="shell">
-      <header class="hero">
-        <div>
-          <p class="eyebrow">Secure Deduplication</p>
-          <h1>Live Defense Console</h1>
+    <div class="backdrop backdrop-a"></div>
+    <div class="backdrop backdrop-b"></div>
+    <main class="page">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Secure Deduplication Prototype</p>
+          <h1>Simple duplicate verification, one step at a time.</h1>
           <p class="lead">
-            This UI demonstrates the project goal in one story: store less with deduplication, protect duplicate claims with
-            Proof-of-Ownership, and react to risky behavior with adaptive policy.
+            The final project is now centered on one clean story: store encrypted chunks once, challenge duplicate claims
+            with proof-of-ownership, and keep behavioural monitoring visible through clear runtime activity metrics.
           </p>
-          <div class="button-row">
-            <button class="primary" id="runFullDemo">Run Full Demo Story</button>
-            <button class="ghost" id="refreshOverview">Refresh Overview</button>
-            <button class="ghost" id="refreshMetrics">Refresh Metrics</button>
-          </div>
         </div>
-        <div class="status-grid">
-          <div class="card">
-            <p class="card-title">API Health</p>
-            <p class="chip" id="healthChip">Unknown</p>
-            <p class="meta" id="healthMeta">Waiting for /health</p>
-          </div>
-          <div class="card">
-            <p class="card-title">Encryption</p>
-            <p class="chip" id="encryptionChip">Unknown</p>
-            <p class="meta" id="encryptionMeta">Waiting for /demo/config</p>
-          </div>
-          <div class="card">
-            <p class="card-title">Storage</p>
-            <p class="chip" id="storageChip">Unknown</p>
-            <p class="meta" id="storageMeta">Waiting for /demo/config</p>
-          </div>
-          <div class="card">
-            <p class="card-title">Policy</p>
-            <p class="chip" id="policyChip">Unknown</p>
-            <p class="meta" id="policyMeta">Waiting for /demo/policy</p>
-          </div>
-          <div class="card">
-            <p class="card-title">Detection</p>
-            <p class="chip" id="detectionChip">Unknown</p>
-            <p class="meta" id="detectionMeta">Waiting for /demo/config</p>
-          </div>
-          <div class="card">
-            <p class="card-title">Live Activity</p>
-            <p class="chip" id="activityChip">Unknown</p>
-            <p class="meta" id="activityMeta">Waiting for /demo/status</p>
-          </div>
+        <div class="hero-card">
+          <p class="mini-label">Project Definition</p>
+          <h2>Encrypted chunk storage + PoW duplicate checks</h2>
+          <p>Base paper: Peng et al., IEEE TNSM 2025.</p>
+          <p>Improvement: chunk-hash-bound segmented AES-GCM, a visible step-wise PoW upload flow, and lightweight behavioural monitoring.</p>
         </div>
-      </header>
+      </section>
 
-      <section class="panel">
-        <div class="panel-head">
-          <h2>Project Purpose</h2>
-          <p>Use these three points while narrating the demo.</p>
-        </div>
-        <div class="purpose-grid">
-          <article class="purpose-card">
-            <h3>1. Save storage with secure dedup</h3>
-            <p>Duplicate chunks are reused instead of being stored again, reducing cost and transfer volume.</p>
-          </article>
-          <article class="purpose-card">
-            <h3>2. Prevent fake duplicate claims</h3>
-            <p>Duplicate uploads trigger PoW challenge-response so only real owners can claim existing chunks.</p>
-          </article>
-          <article class="purpose-card">
-            <h3>3. Adapt to suspicious behavior</h3>
-            <p>Anomaly detection and policy actions (rate-limit/block) respond live during risky request patterns.</p>
-          </article>
-        </div>
+      <section class="metric-grid">
+        <article class="metric-card">
+          <p class="mini-label">Health</p>
+          <p class="metric-value" id="healthValue">...</p>
+          <p class="metric-meta" id="healthMeta">Waiting for service</p>
+        </article>
+        <article class="metric-card">
+          <p class="mini-label">Encryption</p>
+          <p class="metric-value" id="encryptionValue">...</p>
+          <p class="metric-meta" id="encryptionMeta">Waiting for config</p>
+        </article>
+        <article class="metric-card">
+          <p class="mini-label">Active Files</p>
+          <p class="metric-value" id="activeFilesValue">0</p>
+          <p class="metric-meta">Latest active file records</p>
+        </article>
+        <article class="metric-card">
+          <p class="mini-label">Unique Chunks</p>
+          <p class="metric-value" id="uniqueChunksValue">0</p>
+          <p class="metric-meta">Stored encrypted chunk identities</p>
+        </article>
+        <article class="metric-card">
+          <p class="mini-label">Dedup Saved</p>
+          <p class="metric-value" id="dedupSavedValue">0</p>
+          <p class="metric-meta" id="dedupSavedMeta">Waiting for metrics</p>
+        </article>
+        <article class="metric-card">
+          <p class="mini-label">PoW</p>
+          <p class="metric-value" id="powValue">0 / 0</p>
+          <p class="metric-meta" id="powMeta">verified / rejected</p>
+        </article>
+        <article class="metric-card">
+          <p class="mini-label">Monitoring</p>
+          <p class="metric-value" id="monitoringValue">0</p>
+          <p class="metric-meta" id="monitoringMeta">clients / requests seen</p>
+        </article>
       </section>
 
       <section class="panel">
         <div class="panel-head">
-          <h2>Access & Demo Inputs</h2>
-          <p>Set credentials and optional custom file. If no file is selected, text content below is used.</p>
+          <div>
+            <h2>Setup</h2>
+            <p>Pick one file or use the text box. The same content is reused across all three steps.</p>
+          </div>
+          <button class="secondary" id="refreshDashboard">Refresh Dashboard</button>
         </div>
-        <div class="panel-grid">
+        <div class="setup-grid">
           <label>
             <span>API Key</span>
             <input id="apiKey" type="text" value="dev-api-key" />
@@ -94,121 +82,88 @@
             <span>Client ID</span>
             <input id="clientId" type="text" value="demo-client-1" />
           </label>
-          <label>
-            <span>Policy Client ID</span>
-            <input id="policyClientId" type="text" value="demo-attacker-live" />
-          </label>
         </div>
-        <div class="stack">
+        <div class="setup-stack">
           <label>
-            <span>Auto-demo file content</span>
+            <span>Demo file content</span>
             <textarea id="demoContent" rows="4">secure dedup demo payload</textarea>
           </label>
-          <label class="file-input">
+          <label class="file-picker">
             <input id="fileInput" type="file" />
-            <span>Select file (optional)</span>
+            <span>Select file instead</span>
           </label>
-          <p class="meta" id="fileMeta">No file selected. Auto-generated demo payload will be used.</p>
+          <p class="metric-meta" id="fileMeta">No file selected. The text above will be turned into a demo file.</p>
         </div>
       </section>
 
-      <section class="grid two-col">
-        <div class="panel">
-          <div class="panel-head">
-            <h2>Guided Flow</h2>
-            <p>Run sequential steps to demonstrate the full secure-dedup story.</p>
-          </div>
-          <div class="button-row">
-            <button class="primary" id="runBaselineStep">Step 1: Baseline Upload</button>
-            <button class="ghost" id="runDuplicateStep">Step 2: Trigger PoW</button>
-            <button class="ghost" id="runSolveRetryStep">Step 3: Solve + Retry</button>
-            <button class="ghost" id="runAttackStep">Step 4: Bad Proof Attack</button>
-          </div>
-          <div class="mini">
-            <p><strong>Scenario Log</strong></p>
-            <pre id="scenarioLog">Ready.</pre>
-          </div>
-          <div class="mini">
-            <p><strong>Upload Response</strong></p>
-            <pre id="uploadLog">No uploads yet.</pre>
-          </div>
-          <div class="mini">
-            <p><strong>PoW Response</strong></p>
-            <pre id="powLog">No PoW actions yet.</pre>
-          </div>
-        </div>
+      <section class="step-grid">
+        <article class="panel step-panel">
+          <p class="step-tag">Step 1</p>
+          <h3>Upload Original File</h3>
+          <p>Store the first encrypted copy and create the initial file record.</p>
+          <button class="primary" id="stepUploadOriginal">Step 1: Upload Original File</button>
+          <pre id="step1Output">Ready.</pre>
+        </article>
 
-        <div class="panel">
-          <div class="panel-head">
-            <h2>Manual Controls</h2>
-            <p>Use these if you want to drive each API action manually while presenting.</p>
-          </div>
-          <div class="button-row">
-            <button class="primary" id="uploadOnce">Upload Once</button>
-            <button class="ghost" id="uploadDuplicate">Upload Duplicate</button>
-            <button class="ghost" id="solvePow">Auto-Solve PoW</button>
-            <button class="ghost" id="retryUpload">Retry with Proof</button>
-            <button class="ghost" id="inspectChunk">Inspect Last Chunk</button>
-          </div>
-          <div class="button-row">
-            <button class="primary" id="forceRateLimit">Force Rate Limit</button>
-            <button class="ghost" id="forceBlock">Force Block</button>
-            <button class="ghost" id="clearPolicy">Clear Policy</button>
-          </div>
-          <div class="mini">
-            <p><strong>Policy Snapshot</strong></p>
-            <pre id="policyLog">No policy snapshot yet.</pre>
-          </div>
-          <div class="mini">
-            <p><strong>Encryption Inspect</strong></p>
-            <pre id="encryptionLog">No chunk inspected yet.</pre>
-          </div>
-        </div>
+        <article class="panel step-panel">
+          <p class="step-tag">Step 2</p>
+          <h3>Upload Duplicate and Request PoW</h3>
+          <p>Send the same file again and capture the duplicate challenge returned by the server.</p>
+          <button class="primary" id="stepTriggerPow">Step 2: Upload Duplicate and Request PoW</button>
+          <pre id="step2Output">No duplicate attempt yet.</pre>
+        </article>
+
+        <article class="panel step-panel">
+          <p class="step-tag">Step 3</p>
+          <h3>Solve Challenge and Retry</h3>
+          <p>Use the built-in solver, retry the upload, and confirm the dedup path is protected but still usable.</p>
+          <button class="primary" id="stepSolveAndRetry">Step 3: Solve Challenge and Retry</button>
+          <pre id="step3Output">No solve attempt yet.</pre>
+        </article>
       </section>
 
-      <section class="panel">
-        <div class="panel-head">
-          <h2>Scenario Suite Automation</h2>
-          <p>Run all major scenarios and capture per-scenario metrics deltas in one report.</p>
-        </div>
-        <div class="button-row">
-          <button class="primary" id="runScenarioSuite">Run Scenario Suite + Metrics</button>
-          <button class="ghost" id="downloadScenarioJson">Download JSON Report</button>
-          <button class="ghost" id="downloadScenarioCsv">Download CSV Metrics</button>
-        </div>
-        <div class="mini">
-          <p><strong>Suite Execution Log</strong></p>
-          <pre id="suiteLog">Not started.</pre>
-        </div>
-        <div class="mini">
-          <p><strong>Suite Report (Latest)</strong></p>
-          <pre id="suiteReportLog">No suite report yet.</pre>
-        </div>
+      <section class="detail-grid">
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Latest Challenge</h2>
+              <p>Nonce, offset, length, and difficulty for the current duplicate proof request.</p>
+            </div>
+          </div>
+          <pre id="challengeOutput">No challenge returned yet.</pre>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Clear Metrics</h2>
+              <p>High-signal metrics for thesis demo and deployment validation.</p>
+            </div>
+          </div>
+          <pre id="metricsOutput">No metrics loaded yet.</pre>
+        </article>
       </section>
 
-      <section class="grid two-col">
-        <div class="panel">
+      <section class="detail-grid">
+        <article class="panel">
           <div class="panel-head">
-            <h2>Runtime Status</h2>
-            <p>Live view of clients, events, reputation, and policy activity.</p>
+            <div>
+              <h2>Behavioural Monitoring</h2>
+              <p>Recent clients and operations from the running service.</p>
+            </div>
           </div>
-          <pre id="statusLog">No status yet.</pre>
-        </div>
-        <div class="panel">
-          <div class="panel-head">
-            <h2>Metrics</h2>
-            <p>Operational counters from the running service.</p>
-          </div>
-          <pre id="metricsLog">No metrics yet.</pre>
-        </div>
-      </section>
+          <pre id="statusOutput">No status loaded yet.</pre>
+        </article>
 
-      <section class="panel">
-        <div class="panel-head">
-          <h2>Event Timeline</h2>
-          <p>All API responses are streamed here for demo narration.</p>
-        </div>
-        <pre id="eventLog">Ready.</pre>
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Run Log</h2>
+              <p>Step-by-step narration of the latest actions.</p>
+            </div>
+          </div>
+          <pre id="eventOutput">Ready.</pre>
+        </article>
       </section>
     </main>
     <script src="app.js"></script>

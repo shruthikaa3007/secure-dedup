@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -26,7 +26,7 @@ from file_catalog import create_file, delete_file, get_file, list_files, update_
 from features import extract_features
 from hashing import hash_chunk
 from logger import REQUEST_LOGS, log_request
-from metrics_tools import runtime_metrics_snapshot
+from metrics_tools import runtime_metrics_snapshot, runtime_metrics_summary
 from policy_engine import (
     DEFAULT_BLOCK_THRESHOLD,
     DEFAULT_RATE_LIMIT_THRESHOLD,
@@ -291,6 +291,21 @@ def demo_config():
         "status": "ok",
         "server_time_utc": datetime.now(timezone.utc).isoformat(),
         "demo_mode": DEMO_MODE,
+        "project": {
+            "title": "Secure Encrypted Dedup with PoW Ownership Checks",
+            "base_paper": "Peng et al., IEEE TNSM 2025",
+            "focus": [
+                "Upload unique content once and store encrypted chunks.",
+                "Require proof-of-ownership before reusing duplicate chunks.",
+                "Keep behavioural monitoring visible through runtime activity and metrics.",
+                "Show dedup savings and PoW outcomes with clear runtime metrics.",
+            ],
+            "novelty": [
+                "Chunk-hash-bound segmented AES-GCM at rest.",
+                "Step-wise PoW challenge flow for duplicate verification.",
+                "Behavioural monitoring retained as lightweight background telemetry.",
+            ],
+        },
         "auth": {"require_api_key": REQUIRE_API_KEY},
         "storage": storage,
         "encryption": encryption_status(),
@@ -470,7 +485,19 @@ def health():
 
 @app.get("/metrics")
 def metrics():
-    return {"status": "ok", "metrics": runtime_metrics_snapshot()}
+    return {
+        "status": "ok",
+        "metrics": runtime_metrics_snapshot(),
+        "summary": runtime_metrics_summary(),
+    }
+
+
+@app.get("/demo/metrics/summary")
+def demo_metrics_summary():
+    return {
+        "status": "ok",
+        "summary": runtime_metrics_summary(),
+    }
 
 
 @app.get("/demo/encryption")
@@ -552,171 +579,9 @@ def demo_status(limit: int = 20):
     }
 
 
-@app.get("/demo/ui", response_class=HTMLResponse)
+@app.get("/demo/ui")
 def demo_ui():
-    return """
-<!doctype html>
-<html>
-<head>
-  <meta charset=\"utf-8\" />
-  <title>Secure Dedup Demo UI</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 24px; background: #f7f7fb; color: #222; }
-    .card { background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
-    input, textarea { width: 100%; padding: 8px; margin: 6px 0 12px; }
-    button { margin-right: 8px; margin-bottom: 8px; padding: 8px 12px; }
-    pre { background: #111827; color: #d1fae5; padding: 12px; border-radius: 8px; overflow: auto; max-height: 400px; }
-    .ok { color: #065f46; }
-    .warn { color: #92400e; }
-  </style>
-</head>
-<body>
-  <h1>Secure Dedup Demo UI</h1>
-  <p>Run automated upload + PoW flows and inspect live runtime behavior without manually crafting JSON.</p>
-
-  <div class=\"card\">
-    <label>API Key</label>
-    <input id=\"apiKey\" value=\"dev-api-key\" />
-    <label>Client ID</label>
-    <input id=\"clientId\" value=\"demo-ui-client\" />
-    <label>Demo File Content (keep short for single-chunk PoW demo)</label>
-    <textarea id=\"content\" rows=\"4\">secure dedup demo content</textarea>
-    <button onclick=\"runBaseline()\">1) Baseline upload</button>
-    <button onclick=\"runDuplicatePowSuccess()\">2) Duplicate + PoW success</button>
-    <button onclick=\"runPowAttackScenario()\">3) Attack scenario (bad PoW)</button>
-    <button onclick=\"refreshObservability()\">Refresh metrics + demo status</button>
-  </div>
-
-  <div class=\"card\">
-    <h3>Observability</h3>
-    <pre id=\"obs\">(metrics/demo status will appear here)</pre>
-  </div>
-
-  <div class=\"card\">
-    <h3>Scenario log</h3>
-    <pre id=\"log\">(scenario steps will appear here)</pre>
-  </div>
-
-<script>
-const logEl = document.getElementById('log');
-const obsEl = document.getElementById('obs');
-
-function headers() {
-  return {
-    'X-API-Key': document.getElementById('apiKey').value,
-    'X-Client-ID': document.getElementById('clientId').value,
-  };
-}
-
-function appendLog(message, data) {
-  const line = data ? `${message}\n${JSON.stringify(data, null, 2)}\n` : `${message}\n`;
-  logEl.textContent += line + '\n';
-}
-
-function filePayload() {
-  return new TextEncoder().encode(document.getElementById('content').value);
-}
-
-async function sha256Hex(bytes) {
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
-  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-async function computePowProof(challenge, contentBytes) {
-  const nonce = Uint8Array.from(challenge.nonce_hex.match(/.{1,2}/g).map(x => parseInt(x, 16)));
-  const offset = challenge.offset;
-  const length = challenge.length;
-  const partial = contentBytes.slice(offset, offset + length);
-  const joined = new Uint8Array(nonce.length + partial.length);
-  joined.set(nonce, 0);
-  joined.set(partial, nonce.length);
-  return sha256Hex(joined);
-}
-
-async function uploadOnce(powProofs = {}, fileId = '') {
-  const data = filePayload();
-  const form = new FormData();
-  form.append('file', new Blob([data]), 'demo-ui.txt');
-  form.append('pow_proofs_json', JSON.stringify(powProofs));
-  if (fileId) form.append('file_id', fileId);
-  const res = await fetch('/upload', { method: 'POST', headers: headers(), body: form });
-  const body = await res.json();
-  return { status: res.status, body, contentBytes: data };
-}
-
-async function runBaseline() {
-  logEl.textContent = '';
-  appendLog('Running baseline upload...');
-  const result = await uploadOnce();
-  appendLog(`Upload status ${result.status}`, result.body);
-  await refreshObservability();
-}
-
-async function runDuplicatePowSuccess() {
-  logEl.textContent = '';
-  appendLog('Step 1: first upload');
-  const first = await uploadOnce();
-  appendLog(`First upload status ${first.status}`, first.body);
-
-  appendLog('Step 2: duplicate upload to get PoW challenge');
-  const second = await uploadOnce();
-  appendLog(`Second upload status ${second.status}`, second.body);
-  if (second.status !== 409) {
-    appendLog('Expected 409 duplicate PoW challenge but got different response.');
-    await refreshObservability();
-    return;
-  }
-
-  const required = second.body?.detail?.required_challenges || [];
-  const powProofs = {};
-  for (const challenge of required) {
-    const proof = await computePowProof(challenge, second.contentBytes);
-    powProofs[challenge.chunk_hash] = { challenge_id: challenge.challenge_id, proof };
-  }
-
-  appendLog('Step 3: retry upload with computed PoW proof', powProofs);
-  const third = await uploadOnce(powProofs);
-  appendLog(`Third upload status ${third.status}`, third.body);
-  await refreshObservability();
-}
-
-async function runPowAttackScenario() {
-  logEl.textContent = '';
-  appendLog('Attack scenario: submit invalid PoW to show protection path.');
-  await uploadOnce();
-  const second = await uploadOnce();
-  appendLog(`Challenge trigger status ${second.status}`, second.body);
-  const required = second.body?.detail?.required_challenges || [];
-  if (!required.length) {
-    appendLog('No challenge returned; nothing to attack in this run.');
-    await refreshObservability();
-    return;
-  }
-
-  const badProofs = {};
-  for (const challenge of required) {
-    badProofs[challenge.chunk_hash] = { challenge_id: challenge.challenge_id, proof: 'deadbeef' };
-  }
-
-  const attackTry = await uploadOnce(badProofs);
-  appendLog(`Attack retry status ${attackTry.status}`, attackTry.body);
-  appendLog('Expected behavior: server refuses bad proof and keeps requiring valid PoW.');
-  await refreshObservability();
-}
-
-async function refreshObservability() {
-  const [metricsRes, statusRes] = await Promise.all([
-    fetch('/metrics'),
-    fetch('/demo/status?limit=20'),
-  ]);
-  const metrics = await metricsRes.json();
-  const status = await statusRes.json();
-  obsEl.textContent = JSON.stringify({ metrics, status }, null, 2);
-}
-</script>
-</body>
-</html>
-    """
+    return RedirectResponse(url="/ui/")
 
 
 @app.post("/pow/challenge")
@@ -739,6 +604,12 @@ def create_pow_challenge(
         risk_score=adaptive_inputs["risk_score"],
         reputation_score=adaptive_inputs["reputation_score"],
         duplicate_context={"duplicate_hits": 1},
+    )
+    log_request(
+        client_id=client_id,
+        operation_type="pow_challenge",
+        chunk_hash=request.chunk_hash,
+        pow_result="issued",
     )
 
     return {
@@ -859,6 +730,12 @@ async def upload_file(
                 stored_chunk=stored_chunk,
                 client_proof=proof_payload["proof"],
             )
+            log_request(
+                client_id=client_id,
+                operation_type="pow_verify",
+                chunk_hash=chunk_hash,
+                pow_result=is_verified,
+            )
             record_pow_result(client_id, success=is_verified)
 
         if not is_verified:
@@ -882,6 +759,13 @@ async def upload_file(
         }
 
     if pending_challenges_by_hash:
+        for chunk_hash in pending_challenges_by_hash:
+            log_request(
+                client_id=client_id,
+                operation_type="pow_challenge",
+                chunk_hash=chunk_hash,
+                pow_result="required",
+            )
         raise HTTPException(
             status_code=409,
             detail={

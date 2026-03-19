@@ -338,8 +338,8 @@ def main() -> int:
 
         ui_index = (repo_root / "ui" / "index.html").read_text(encoding="utf-8")
         ui_app_js = (repo_root / "ui" / "app.js").read_text(encoding="utf-8")
-        _assert("Run Full Demo Story" in ui_index, "UI missing full-demo CTA")
-        _assert("runFullDemo" in ui_app_js, "UI missing full-demo handler")
+        _assert("Step 1: Upload Original File" in ui_index, "UI missing step 1 CTA")
+        _assert("stepSolveAndRetry" in ui_app_js, "UI missing solve-and-retry handler")
         return {
             "encryption_enabled": bool(enc.get("encryption_enabled")),
             "ui_hooks_present": True,
@@ -350,11 +350,13 @@ def main() -> int:
         metrics = app.metrics()
         _assert(status.get("status") == "ok", "demo status endpoint failed")
         _assert(metrics.get("status") == "ok", "metrics endpoint failed")
+        _assert("summary" in metrics, "metrics payload missing summary block")
         summary = status.get("summary", {})
         return {
             "active_clients": summary.get("active_clients"),
             "total_buffered_events": summary.get("total_buffered_events"),
             "metrics_keys": sorted((metrics.get("metrics") or {}).keys()),
+            "pow_challenges": (metrics.get("summary") or {}).get("pow", {}).get("challenges_issued"),
         }
 
     scenario_defs: List[tuple[str, Callable[[], Optional[Dict[str, Any]]]]] = [

@@ -90,9 +90,10 @@ def main() -> int:
 
     def case_config() -> Dict[str, Any]:
         response = app.demo_config()
-        for key in ("storage", "encryption", "detection", "policy", "pow"):
+        for key in ("project", "storage", "encryption", "detection", "policy", "pow"):
             _assert(key in response, f"missing key in /demo/config response: {key}")
         return {
+            "project_title": response.get("project", {}).get("title"),
             "detection_mode": response.get("detection", {}).get("mode"),
             "storage": response.get("storage", {}).get("backend"),
             "encryption_enabled": response.get("encryption", {}).get("enabled"),
@@ -114,6 +115,25 @@ def main() -> int:
         try:
             asyncio.run(_upload())
         except HTTPException as exc:
+            if exc.status_code in {403, 429}:
+                app.demo_clear_policy(
+                    request=app.DemoClearPolicyRequest(client_id=ctx.client_id),
+                    x_api_key="dev-api-key",
+                )
+                try:
+                    asyncio.run(_upload())
+                except HTTPException as retry_exc:
+                    _assert(retry_exc.status_code == 409, f"expected 409, got {retry_exc.status_code}")
+                    detail = retry_exc.detail or {}
+                    challenges = detail.get("required_challenges") or []
+                    _assert(bool(challenges), "no PoW challenges returned on duplicate retry")
+                    ctx.challenges = challenges
+                    return {
+                        "challenge_count": len(challenges),
+                        "hint": detail.get("hint"),
+                        "retry_path": "clear_policy_then_duplicate",
+                    }
+                raise AssertionError("duplicate retry did not trigger PoW challenge")
             _assert(exc.status_code == 409, f"expected 409, got {exc.status_code}")
             detail = exc.detail or {}
             challenges = detail.get("required_challenges") or []
@@ -122,6 +142,7 @@ def main() -> int:
             return {
                 "challenge_count": len(challenges),
                 "hint": detail.get("hint"),
+                "retry_path": "direct_duplicate",
             }
         raise AssertionError("duplicate upload did not trigger PoW challenge")
 
@@ -146,7 +167,16 @@ def main() -> int:
         _assert(bool(proofs), "PoW solver did not return proofs")
         ctx.proofs = proofs
 
-        retry = asyncio.run(_upload(pow_proofs_json=json.dumps(proofs)))
+        try:
+            retry = asyncio.run(_upload(pow_proofs_json=json.dumps(proofs)))
+        except HTTPException as exc:
+            if exc.status_code not in {403, 429}:
+                raise
+            app.demo_clear_policy(
+                request=app.DemoClearPolicyRequest(client_id=ctx.client_id),
+                x_api_key="dev-api-key",
+            )
+            retry = asyncio.run(_upload(pow_proofs_json=json.dumps(proofs)))
         _assert(retry.get("status") == "Upload successful", "retry with proofs failed")
         return {
             "proof_count": len(proofs),
@@ -158,18 +188,23 @@ def main() -> int:
         metrics = app.metrics()
         _assert(status.get("status") == "ok", "/demo/status did not return ok")
         _assert(metrics.get("status") == "ok", "/metrics did not return ok")
+        summary = metrics.get("summary") or {}
+        _assert("storage" in summary, "/metrics summary missing storage section")
+        _assert("pow" in summary, "/metrics summary missing pow section")
         summary = status.get("summary", {})
         return {
             "active_clients": summary.get("active_clients"),
             "total_buffered_events": summary.get("total_buffered_events"),
             "metrics_keys": sorted((metrics.get("metrics") or {}).keys()),
+            "pow_challenges": (metrics.get("summary") or {}).get("pow", {}).get("challenges_issued"),
         }
 
     def case_ui_assets() -> Dict[str, Any]:
         ui_index = (repo_root / "ui" / "index.html").read_text(encoding="utf-8")
         ui_app_js = (repo_root / "ui" / "app.js").read_text(encoding="utf-8")
-        _assert("Run Full Demo Story" in ui_index, "UI hero CTA missing")
-        _assert("runFullDemo" in ui_app_js, "UI runFullDemo flow missing")
+        _assert("Step 1: Upload Original File" in ui_index, "UI step 1 CTA missing")
+        _assert("stepSolveAndRetry" in ui_app_js, "UI step 3 flow missing")
+        _assert("Behavioural Monitoring" in ui_index, "UI monitoring panel missing")
         return {"ui_checks": "ok"}
 
     cases: List[tuple[str, Callable[[], Optional[Dict[str, Any]]]]] = [

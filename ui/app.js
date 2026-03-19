@@ -3,87 +3,58 @@ const byId = (id) => document.getElementById(id);
 const els = {
   apiKey: byId("apiKey"),
   clientId: byId("clientId"),
-  policyClientId: byId("policyClientId"),
   demoContent: byId("demoContent"),
   fileInput: byId("fileInput"),
   fileMeta: byId("fileMeta"),
-  runFullDemo: byId("runFullDemo"),
-  runBaselineStep: byId("runBaselineStep"),
-  runDuplicateStep: byId("runDuplicateStep"),
-  runSolveRetryStep: byId("runSolveRetryStep"),
-  runAttackStep: byId("runAttackStep"),
-  runScenarioSuite: byId("runScenarioSuite"),
-  downloadScenarioJson: byId("downloadScenarioJson"),
-  downloadScenarioCsv: byId("downloadScenarioCsv"),
-  uploadOnce: byId("uploadOnce"),
-  uploadDuplicate: byId("uploadDuplicate"),
-  solvePow: byId("solvePow"),
-  retryUpload: byId("retryUpload"),
-  inspectChunk: byId("inspectChunk"),
-  forceRateLimit: byId("forceRateLimit"),
-  forceBlock: byId("forceBlock"),
-  clearPolicy: byId("clearPolicy"),
-  refreshOverview: byId("refreshOverview"),
-  refreshMetrics: byId("refreshMetrics"),
-  healthChip: byId("healthChip"),
-  encryptionChip: byId("encryptionChip"),
-  storageChip: byId("storageChip"),
-  policyChip: byId("policyChip"),
-  detectionChip: byId("detectionChip"),
-  activityChip: byId("activityChip"),
+  refreshDashboard: byId("refreshDashboard"),
+  stepUploadOriginal: byId("stepUploadOriginal"),
+  stepTriggerPow: byId("stepTriggerPow"),
+  stepSolveAndRetry: byId("stepSolveAndRetry"),
+  healthValue: byId("healthValue"),
   healthMeta: byId("healthMeta"),
+  encryptionValue: byId("encryptionValue"),
   encryptionMeta: byId("encryptionMeta"),
-  storageMeta: byId("storageMeta"),
-  policyMeta: byId("policyMeta"),
-  detectionMeta: byId("detectionMeta"),
-  activityMeta: byId("activityMeta"),
-  scenarioLog: byId("scenarioLog"),
-  suiteLog: byId("suiteLog"),
-  suiteReportLog: byId("suiteReportLog"),
-  uploadLog: byId("uploadLog"),
-  powLog: byId("powLog"),
-  policyLog: byId("policyLog"),
-  encryptionLog: byId("encryptionLog"),
-  statusLog: byId("statusLog"),
-  metricsLog: byId("metricsLog"),
-  eventLog: byId("eventLog"),
+  activeFilesValue: byId("activeFilesValue"),
+  uniqueChunksValue: byId("uniqueChunksValue"),
+  dedupSavedValue: byId("dedupSavedValue"),
+  dedupSavedMeta: byId("dedupSavedMeta"),
+  powValue: byId("powValue"),
+  powMeta: byId("powMeta"),
+  monitoringValue: byId("monitoringValue"),
+  monitoringMeta: byId("monitoringMeta"),
+  step1Output: byId("step1Output"),
+  step2Output: byId("step2Output"),
+  step3Output: byId("step3Output"),
+  challengeOutput: byId("challengeOutput"),
+  metricsOutput: byId("metricsOutput"),
+  statusOutput: byId("statusOutput"),
+  eventOutput: byId("eventOutput"),
 };
 
 const state = {
   selectedFile: null,
   lastChallenges: [],
   lastProofs: null,
-  lastChunk: null,
-  lastSuiteReport: null,
 };
 
-function setChip(el, text, level) {
-  el.textContent = text;
-  el.classList.remove("good", "warn", "bad");
-  if (level) {
-    el.classList.add(level);
-  }
-}
-
 function pretty(payload) {
-  if (payload === undefined) return "No data";
-  if (typeof payload === "string") return payload;
+  if (payload === undefined || payload === null) {
+    return "No data";
+  }
+  if (typeof payload === "string") {
+    return payload;
+  }
   try {
     return JSON.stringify(payload, null, 2);
-  } catch (err) {
+  } catch (error) {
     return String(payload);
   }
 }
 
-function appendScenario(message) {
+function prependLog(label, payload) {
   const stamp = new Date().toLocaleTimeString();
-  els.scenarioLog.textContent = `[${stamp}] ${message}\n` + els.scenarioLog.textContent;
-}
-
-function logEvent(label, payload) {
-  const stamp = new Date().toLocaleTimeString();
-  const entry = `[${stamp}] ${label}\n${pretty(payload)}\n\n`;
-  els.eventLog.textContent = entry + els.eventLog.textContent;
+  const block = `[${stamp}] ${label}\n${pretty(payload)}\n\n`;
+  els.eventOutput.textContent = block + els.eventOutput.textContent;
 }
 
 function apiKey() {
@@ -92,10 +63,6 @@ function apiKey() {
 
 function clientId() {
   return (els.clientId.value || "").trim();
-}
-
-function policyClientId() {
-  return (els.policyClientId.value || "").trim() || clientId();
 }
 
 function defaultHeaders(withClientId = true) {
@@ -108,62 +75,33 @@ function defaultHeaders(withClientId = true) {
   return headers;
 }
 
-async function readBody(res) {
-  const contentType = res.headers.get("content-type") || "";
+async function readBody(response) {
+  const contentType = response.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
-    return res.json();
+    return response.json();
   }
-  return res.text();
+  return response.text();
 }
 
 async function fetchJson(path, options = {}) {
   try {
-    const res = await fetch(path, options);
-    const body = await readBody(res);
-    return { ok: res.ok, status: res.status, body };
-  } catch (err) {
+    const response = await fetch(path, options);
+    const body = await readBody(response);
+    return {
+      ok: response.ok,
+      status: response.status,
+      body,
+    };
+  } catch (error) {
     return {
       ok: false,
       status: 0,
-      body: { error: "Network error", detail: String(err) },
+      body: {
+        error: "Network error",
+        detail: String(error),
+      },
     };
   }
-}
-
-function nowIso() {
-  return new Date().toISOString();
-}
-
-function ensure(condition, message) {
-  if (!condition) {
-    throw new Error(message);
-  }
-}
-
-function metricDelta(before, after) {
-  const keys = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
-  const delta = {};
-  for (const key of keys) {
-    delta[key] = Number(after?.[key] || 0) - Number(before?.[key] || 0);
-  }
-  return delta;
-}
-
-async function metricsSnapshot() {
-  const res = await fetchJson("/metrics");
-  return res.ok ? (res.body.metrics || {}) : {};
-}
-
-function downloadTextFile(filename, content, contentType) {
-  const blob = new Blob([content], { type: contentType });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
 }
 
 function effectiveDemoFile() {
@@ -175,144 +113,22 @@ function effectiveDemoFile() {
     };
   }
 
-  const rawText = (els.demoContent.value || "").trim();
-  const content = rawText || `secure dedup demo ${new Date().toISOString()}`;
-  const blob = new Blob([content], { type: "text/plain" });
+  const content = (els.demoContent.value || "").trim() || "secure dedup demo payload";
+  const payload = new Blob([content], { type: "text/plain" });
   return {
-    payload: blob,
-    name: "demo-auto.txt",
-    size: blob.size,
+    payload,
+    name: "demo-step-upload.txt",
+    size: payload.size,
   };
 }
 
-function buildInvalidProofs() {
-  const bad = {};
-  for (const challenge of state.lastChallenges) {
-    bad[challenge.chunk_hash] = {
-      challenge_id: challenge.challenge_id,
-      proof: "deadbeef",
-    };
-  }
-  return bad;
-}
-
-async function refreshPolicySnapshot() {
-  const id = policyClientId();
-  if (!id) {
-    setChip(els.policyChip, "Missing ID", "warn");
-    els.policyMeta.textContent = "Set Policy Client ID";
-    return null;
-  }
-
-  const result = await fetchJson(`/demo/policy/${encodeURIComponent(id)}`, {
-    headers: {
-      "X-API-Key": apiKey(),
-    },
-  });
-
-  if (result.ok) {
-    const active = result.body.active_policy;
-    if (active && active.action && active.action !== "ALLOW") {
-      const level = active.action === "BLOCK" ? "bad" : "warn";
-      setChip(els.policyChip, active.action, level);
-      els.policyMeta.textContent = `Cooldown ${Math.round(active.remaining_sec || 0)}s`;
-    } else {
-      setChip(els.policyChip, "ALLOW", "good");
-      els.policyMeta.textContent = "No active policy action";
-    }
-    els.policyLog.textContent = pretty(result.body);
-  } else {
-    setChip(els.policyChip, "Error", "bad");
-    els.policyMeta.textContent = "Policy endpoint failed";
-    els.policyLog.textContent = pretty(result.body);
-  }
-
-  return result;
-}
-
-async function refreshOverview() {
-  const policyPromise = refreshPolicySnapshot();
-  const [health, config, status, policy] = await Promise.all([
-    fetchJson("/health"),
-    fetchJson("/demo/config"),
-    fetchJson("/demo/status?limit=20"),
-    policyPromise,
-  ]);
-
-  if (health.ok && health.body.status === "ok") {
-    setChip(els.healthChip, "Healthy", "good");
-    els.healthMeta.textContent = "Service responding on /health";
-  } else {
-    setChip(els.healthChip, "Unhealthy", "bad");
-    els.healthMeta.textContent = `Health check failed (${health.status || "network"})`;
-  }
-
-  if (config.ok) {
-    const encryption = config.body.encryption || {};
-    if (encryption.enabled) {
-      setChip(els.encryptionChip, "Enabled", "good");
-      els.encryptionMeta.textContent = `Key ${encryption.key_bytes || 0} bytes`;
-    } else {
-      setChip(els.encryptionChip, "Disabled", "warn");
-      els.encryptionMeta.textContent = "Set CHUNK_ENCRYPTION_KEY for encrypted chunks";
-    }
-
-    const storage = config.body.storage || {};
-    setChip(els.storageChip, storage.backend || "Unknown", storage.backend ? "good" : "warn");
-    els.storageMeta.textContent = storage.local_dir ? `Dir: ${storage.local_dir}` : "No storage details";
-
-    const detection = (config.body.detection || {}).mode || "unknown";
-    setChip(els.detectionChip, detection, detection === "supervised" ? "good" : "warn");
-    els.detectionMeta.textContent = `Threshold ${(config.body.detection || {}).unsupervised_threshold ?? "n/a"}`;
-  } else {
-    setChip(els.encryptionChip, "Error", "bad");
-    setChip(els.storageChip, "Error", "bad");
-    setChip(els.detectionChip, "Error", "bad");
-    els.encryptionMeta.textContent = "Failed to load /demo/config";
-    els.storageMeta.textContent = "Failed to load /demo/config";
-    els.detectionMeta.textContent = "Failed to load /demo/config";
-  }
-
-  if (status.ok) {
-    const summary = status.body.summary || {};
-    const activeClients = summary.active_clients || 0;
-    const bufferedEvents = summary.total_buffered_events || 0;
-    setChip(els.activityChip, `${activeClients} clients`, activeClients > 0 ? "good" : "warn");
-    els.activityMeta.textContent = `${bufferedEvents} buffered events`;
-    els.statusLog.textContent = pretty(status.body);
-  } else {
-    setChip(els.activityChip, "Error", "bad");
-    els.activityMeta.textContent = "Failed to load /demo/status";
-    els.statusLog.textContent = pretty(status.body);
-  }
-
-  if (policy) {
-    logEvent("Overview refreshed", {
-      health,
-      config,
-      status,
-      policy,
-    });
-  }
-}
-
-async function refreshMetrics() {
-  const metrics = await fetchJson("/metrics");
-  els.metricsLog.textContent = pretty(metrics.body);
-  logEvent("Metrics refreshed", metrics.body || metrics);
-}
-
-async function uploadFile(mode = "none") {
+async function uploadWithProofs(powProofs = null) {
   const demoFile = effectiveDemoFile();
   const form = new FormData();
   form.append("file", demoFile.payload, demoFile.name);
 
-  if (mode === "good" && state.lastProofs) {
-    form.append("pow_proofs_json", JSON.stringify(state.lastProofs));
-  }
-
-  if (mode === "bad" && state.lastChallenges.length) {
-    form.append("pow_proofs_json", JSON.stringify(buildInvalidProofs()));
+  if (powProofs) {
+    form.append("pow_proofs_json", JSON.stringify(powProofs));
   }
 
   const result = await fetchJson("/upload", {
@@ -321,519 +137,125 @@ async function uploadFile(mode = "none") {
     body: form,
   });
 
-  els.uploadLog.textContent = pretty(result.body);
-  logEvent(`Upload (${mode})`, result.body || result);
+  prependLog("Upload request", {
+    file_name: demoFile.name,
+    file_size: demoFile.size,
+    status: result.status,
+    body: result.body,
+  });
+  return result;
+}
 
-  if (result.ok) {
-    state.lastChallenges = [];
-    state.lastProofs = null;
-    const recipe = result.body.file_recipe || [];
-    state.lastChunk = recipe.length ? recipe[0] : null;
-    appendScenario(`Upload successful (${demoFile.name}, ${demoFile.size} bytes)`);
-    return result;
+function challengeSummary(challenges) {
+  if (!Array.isArray(challenges) || !challenges.length) {
+    return "No challenge returned yet.";
   }
 
-  const detail = result.body && result.body.detail;
-  if (result.status === 409 && detail && detail.required_challenges) {
-    state.lastChallenges = detail.required_challenges;
-    els.powLog.textContent = pretty(detail.required_challenges);
-    appendScenario(`PoW required: ${detail.required_challenges.length} challenge(s) returned`);
+  const first = challenges[0];
+  const difficulty = first.adaptive_profile?.difficulty_level || "normal";
+  return pretty({
+    challenge_count: challenges.length,
+    first_chunk_hash: first.chunk_hash,
+    first_challenge_id: first.challenge_id,
+    difficulty_level: difficulty,
+    offset: first.offset,
+    length: first.length,
+    expires_at: first.expires_at,
+  });
+}
+
+function applyMetrics(summary) {
+  const storage = summary?.storage || {};
+  const pow = summary?.pow || {};
+  const encryption = summary?.encryption || {};
+  const activity = summary?.activity || {};
+
+  els.activeFilesValue.textContent = String(storage.active_files ?? 0);
+  els.uniqueChunksValue.textContent = String(storage.unique_chunks ?? 0);
+  els.dedupSavedValue.textContent = String(storage.dedup_saved_chunks ?? 0);
+  els.dedupSavedMeta.textContent = `${storage.dedup_saved_percent ?? 0}% logical chunks saved by dedup`;
+  els.powValue.textContent = `${pow.proofs_verified ?? 0} / ${pow.proofs_rejected ?? 0}`;
+  els.powMeta.textContent = `${pow.challenges_issued ?? 0} challenges issued`;
+  els.monitoringValue.textContent = String(activity.clients_seen ?? 0);
+  els.monitoringMeta.textContent = `${activity.requests_seen ?? 0} requests observed`;
+  els.encryptionValue.textContent = encryption.enabled ? "Enabled" : "Disabled";
+  els.encryptionMeta.textContent = encryption.enabled
+    ? `${encryption.mode || "AES-GCM"} | segment ${encryption.segment_size || "n/a"}`
+    : "Set CHUNK_ENCRYPTION_KEY to enable encrypted storage";
+}
+
+async function refreshDashboard() {
+  const [health, config, metrics, status] = await Promise.all([
+    fetchJson("/health"),
+    fetchJson("/demo/config"),
+    fetchJson("/metrics"),
+    fetchJson("/demo/status?limit=10"),
+  ]);
+
+  if (health.ok && health.body.status === "ok") {
+    els.healthValue.textContent = "Healthy";
+    els.healthMeta.textContent = "Service responding";
   } else {
-    appendScenario(`Upload failed with status ${result.status}`);
+    els.healthValue.textContent = "Error";
+    els.healthMeta.textContent = `Health check failed (${health.status || "network"})`;
   }
 
-  return result;
-}
-
-function createTextFile(name, text) {
-  return {
-    payload: new Blob([text], { type: "text/plain" }),
-    name,
-  };
-}
-
-async function uploadForClient(clientIdValue, fileObj, { powProofs = null, fileId = null } = {}) {
-  const form = new FormData();
-  form.append("file", fileObj.payload, fileObj.name);
-  if (powProofs) {
-    form.append("pow_proofs_json", JSON.stringify(powProofs));
-  }
-  if (fileId) {
-    form.append("file_id", fileId);
+  if (metrics.ok) {
+    applyMetrics(metrics.body.summary || {});
+    els.metricsOutput.textContent = pretty(metrics.body.summary || metrics.body);
+  } else {
+    els.metricsOutput.textContent = pretty(metrics.body);
   }
 
-  return fetchJson("/upload", {
-    method: "POST",
-    headers: {
-      "X-API-Key": apiKey(),
-      "X-Client-ID": clientIdValue,
-    },
-    body: form,
-  });
+  els.statusOutput.textContent = pretty(status.body || status);
 }
 
-async function clearPolicyForClient(clientIdValue) {
-  return fetchJson("/demo/clear-policy", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-API-Key": apiKey(),
-    },
-    body: JSON.stringify({ client_id: clientIdValue }),
-  });
-}
+async function runOriginalUploadStep() {
+  state.lastChallenges = [];
+  state.lastProofs = null;
+  els.challengeOutput.textContent = "No challenge returned yet.";
 
-async function forcePolicyForClient(clientIdValue, action) {
-  return fetchJson("/demo/force-policy", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-API-Key": apiKey(),
-    },
-    body: JSON.stringify({ client_id: clientIdValue, action }),
-  });
-}
-
-async function uploadWithPolicyRecovery(clientIdValue, fileObj, options = {}) {
-  const maxRetries = 3;
-  let result = await uploadForClient(clientIdValue, fileObj, options);
-  for (let attempt = 1; attempt <= maxRetries && (result.status === 429 || result.status === 403); attempt += 1) {
-    suiteLog(
-      `Policy gate (status ${result.status}) for ${clientIdValue}. Clearing policy and retrying (${attempt}/${maxRetries})...`,
-    );
-    await clearPolicyForClient(clientIdValue);
-    result = await uploadForClient(clientIdValue, fileObj, options);
+  const result = await uploadWithProofs(null);
+  els.step1Output.textContent = pretty(result.body);
+  if (result.ok) {
+    prependLog("Step 1 complete", "Original upload stored successfully.");
+  } else {
+    prependLog("Step 1 failed", result.body);
   }
-  return result;
+  await refreshDashboard();
 }
 
-function suiteLog(message) {
-  if (!els.suiteLog) {
-    return;
-  }
-  const stamp = new Date().toLocaleTimeString();
-  els.suiteLog.textContent = `[${stamp}] ${message}\n` + els.suiteLog.textContent;
-}
+async function runDuplicateUploadStep() {
+  const result = await uploadWithProofs(null);
+  els.step2Output.textContent = pretty(result.body);
 
-function csvEscape(value) {
-  const raw = String(value ?? "");
-  return `"${raw.replace(/"/g, '""')}"`;
-}
+  const challenges = result.body?.detail?.required_challenges || [];
+  state.lastChallenges = Array.isArray(challenges) ? challenges : [];
+  els.challengeOutput.textContent = challengeSummary(state.lastChallenges);
 
-function buildSuiteCsv(report) {
-  const metricKeys = Array.from(
-    new Set((report.results || []).flatMap((item) => Object.keys(item.metrics_delta || {}))),
-  ).sort();
-  const header = ["scenario", "status", "duration_ms", "detail", ...metricKeys.map((key) => `delta_${key}`)];
-  const rows = [header.map(csvEscape).join(",")];
-
-  for (const item of report.results || []) {
-    const row = [item.name, item.status, item.duration_ms, item.detail || ""];
-    for (const key of metricKeys) {
-      row.push((item.metrics_delta || {})[key] ?? 0);
-    }
-    rows.push(row.map(csvEscape).join(","));
-  }
-  return rows.join("\n") + "\n";
-}
-
-async function runScenarioCase(suite, name, fn) {
-  const before = await metricsSnapshot();
-  const started = performance.now();
-  let status = "PASS";
-  let detail = "";
-  let data = null;
-
-  try {
-    data = await fn();
-  } catch (err) {
-    status = "FAIL";
-    detail = String(err?.message || err);
-  }
-
-  const after = await metricsSnapshot();
-  const durationMs = Math.round(performance.now() - started);
-  const result = {
-    name,
-    status,
-    duration_ms: durationMs,
-    detail,
-    data,
-    metrics_before: before,
-    metrics_after: after,
-    metrics_delta: metricDelta(before, after),
-  };
-  suite.results.push(result);
-  suiteLog(`${status} ${name} (${durationMs} ms)${detail ? ` - ${detail}` : ""}`);
-  return result;
-}
-
-async function runScenarioSuite() {
-  if (!els.suiteLog || !els.suiteReportLog) {
-    appendScenario("Scenario suite panel not found in current UI build.");
-    return;
-  }
-
-  els.suiteLog.textContent = "Running scenario suite...\n";
-  els.suiteReportLog.textContent = "Generating report...\n";
-
-  const ts = Date.now();
-  const mainClient = `${clientId() || "demo"}-suite-main-${ts}`;
-  const secondClient = `${clientId() || "demo"}-suite-second-${ts}`;
-  const thirdClient = `${clientId() || "demo"}-suite-third-${ts}`;
-  const baseFile = effectiveDemoFile();
-
-  const ctx = {
-    mainClient,
-    secondClient,
-    thirdClient,
-    baseFile,
-    mainChunkHash: null,
-    mainChallenges: [],
-    secondaryFileId: null,
-  };
-
-  const suite = {
-    generated_at: nowIso(),
-    api_key_present: Boolean(apiKey()),
-    clients: {
-      main: mainClient,
-      second: secondClient,
-      third: thirdClient,
-    },
-    results: [],
-  };
-
-  await runScenarioCase(suite, "Scenario 1 - Baseline Upload", async () => {
-    const res = await uploadWithPolicyRecovery(ctx.mainClient, ctx.baseFile);
-    ensure(res.ok, `Baseline upload failed (${res.status})`);
-    const recipe = res.body.file_recipe || [];
-    ensure(recipe.length > 0, "Baseline upload returned empty file_recipe");
-    ctx.mainChunkHash = recipe[0];
-    return {
-      file_id: res.body.file?.file_id || null,
-      total_chunks: res.body.total_chunks || 0,
-      chunk_hash: ctx.mainChunkHash,
-    };
-  });
-
-  await runScenarioCase(suite, "Scenario 2 - Duplicate Requires PoW", async () => {
-    let res = await uploadForClient(ctx.mainClient, ctx.baseFile);
-    if (res.status === 429 || res.status === 403) {
-      await clearPolicyForClient(ctx.mainClient);
-      res = await uploadForClient(ctx.mainClient, ctx.baseFile);
-    }
-    ensure(res.status === 409, `Expected 409 duplicate challenge, got ${res.status}`);
-    const challenges = res.body?.detail?.required_challenges || [];
-    ensure(challenges.length > 0, "No required_challenges returned");
-    ctx.mainChallenges = challenges;
-    return { challenge_count: challenges.length };
-  });
-
-  await runScenarioCase(suite, "Scenario 3 - PoW Solve And Retry", async () => {
-    ensure(ctx.mainChallenges.length > 0, "Missing PoW challenges from previous scenario");
-    const challengePayload = ctx.mainChallenges.map((c) => ({
-      chunk_hash: c.chunk_hash,
-      challenge_id: c.challenge_id,
-      nonce_hex: c.nonce_hex,
-      offset: c.offset,
-      length: c.length,
-    }));
-    const solve = await fetchJson("/demo/solve_pow", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": apiKey(),
-      },
-      body: JSON.stringify({ challenges: challengePayload }),
+  if (result.status === 409 && state.lastChallenges.length) {
+    prependLog("Step 2 complete", {
+      message: "Duplicate upload correctly triggered PoW.",
+      challenge_count: state.lastChallenges.length,
     });
-    ensure(solve.ok, `PoW solve endpoint failed (${solve.status})`);
-    const proofs = solve.body.pow_proofs || {};
-    ensure(Object.keys(proofs).length > 0, "PoW solve returned empty proofs");
-    const retry = await uploadWithPolicyRecovery(ctx.mainClient, ctx.baseFile, { powProofs: proofs });
-    ensure(retry.ok, `Retry upload failed (${retry.status})`);
-    return { proof_count: Object.keys(proofs).length, retry_total_chunks: retry.body.total_chunks || 0 };
-  });
-
-  await runScenarioCase(suite, "Scenario 4 - Policy Enforcement And Recovery", async () => {
-    const rlForce = await forcePolicyForClient(ctx.mainClient, "RATE_LIMIT");
-    ensure(rlForce.ok, `Force RATE_LIMIT failed (${rlForce.status})`);
-    const rlAttempt = await uploadForClient(
-      ctx.mainClient,
-      createTextFile(`rate_limit_${ts}.txt`, `rate-limit-${nowIso()}`),
-    );
-    ensure(rlAttempt.status === 429, `Expected 429 after RATE_LIMIT, got ${rlAttempt.status}`);
-
-    await clearPolicyForClient(ctx.mainClient);
-    const rlRecover = await uploadWithPolicyRecovery(
-      ctx.mainClient,
-      createTextFile(`rate_limit_recover_${ts}.txt`, `rate-limit-recover-${nowIso()}`),
-    );
-    ensure(rlRecover.ok, `Recovery after RATE_LIMIT failed (${rlRecover.status})`);
-
-    const blockForce = await forcePolicyForClient(ctx.mainClient, "BLOCK");
-    ensure(blockForce.ok, `Force BLOCK failed (${blockForce.status})`);
-    const blockAttempt = await uploadForClient(
-      ctx.mainClient,
-      createTextFile(`block_${ts}.txt`, `block-${nowIso()}`),
-    );
-    ensure(blockAttempt.status === 403, `Expected 403 after BLOCK, got ${blockAttempt.status}`);
-
-    await clearPolicyForClient(ctx.mainClient);
-    const blockRecover = await uploadWithPolicyRecovery(
-      ctx.mainClient,
-      createTextFile(`block_recover_${ts}.txt`, `block-recover-${nowIso()}`),
-    );
-    ensure(blockRecover.ok, `Recovery after BLOCK failed (${blockRecover.status})`);
-    return { rate_limit_blocked: true, block_blocked: true };
-  });
-
-  await runScenarioCase(suite, "Scenario 5 - File Version Update And Delete", async () => {
-    const first = await uploadWithPolicyRecovery(
-      ctx.secondClient,
-      createTextFile(`version_v1_${ts}.txt`, `version-v1-${nowIso()}`),
-    );
-    ensure(first.ok, `First version upload failed (${first.status})`);
-    const fileId = first.body?.file?.file_id;
-    ensure(fileId, "No file_id returned for versioning scenario");
-    ctx.secondaryFileId = fileId;
-
-    const second = await uploadWithPolicyRecovery(
-      ctx.secondClient,
-      createTextFile(`version_v2_${ts}.txt`, `version-v2-${nowIso()}`),
-      { fileId },
-    );
-    ensure(second.ok, `Second version upload failed (${second.status})`);
-    ensure(second.body?.file?.version === 2, "Expected version=2 after update");
-
-    const fetched = await fetchJson(`/files/${encodeURIComponent(fileId)}`, {
-      headers: {
-        "X-API-Key": apiKey(),
-        "X-Client-ID": ctx.secondClient,
-      },
-    });
-    ensure(fetched.ok, `Fetch file by id failed (${fetched.status})`);
-
-    const deleted = await fetchJson(`/files/${encodeURIComponent(fileId)}`, {
-      method: "DELETE",
-      headers: {
-        "X-API-Key": apiKey(),
-        "X-Client-ID": ctx.secondClient,
-      },
-    });
-    ensure(deleted.ok, `Delete file failed (${deleted.status})`);
-    return { file_id: fileId, version_after_update: second.body.file.version };
-  });
-
-  await runScenarioCase(suite, "Scenario 6 - Ownership Transfer And Audit", async () => {
-    ensure(ctx.mainChunkHash, "Main chunk hash not available");
-    const before = await fetchJson(`/ownership/${encodeURIComponent(ctx.mainChunkHash)}`, {
-      headers: {
-        "X-API-Key": apiKey(),
-        "X-Client-ID": ctx.mainClient,
-      },
-    });
-    ensure(before.ok, `Ownership fetch failed (${before.status})`);
-
-    const transfer = await fetchJson("/ownership/transfer", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": apiKey(),
-        "X-Client-ID": ctx.mainClient,
-      },
-      body: JSON.stringify({
-        chunk_hash: ctx.mainChunkHash,
-        to_client_id: ctx.thirdClient,
-      }),
-    });
-    ensure(transfer.ok, `Ownership transfer failed (${transfer.status})`);
-
-    const challenge = await fetchJson("/audit/challenge", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": apiKey(),
-        "X-Client-ID": ctx.thirdClient,
-      },
-      body: JSON.stringify({
-        chunk_hash: ctx.mainChunkHash,
-        length: 16,
-      }),
-    });
-    ensure(challenge.ok, `Audit challenge failed (${challenge.status})`);
-    const ch = challenge.body.challenge || {};
-
-    const auditChallengePayload = {
-      chunk_hash: ch.chunk_hash,
-      challenge_id: ch.challenge_id,
-      nonce_hex: ch.nonce_hex,
-      offset: ch.offset,
-      length: ch.length,
-    };
-
-    let solveAudit = await fetchJson("/demo/solve_audit", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": apiKey(),
-      },
-      body: JSON.stringify({
-        challenge: auditChallengePayload,
-      }),
-    });
-
-    if (!solveAudit.ok || !solveAudit.body?.proof) {
-      suiteLog(
-        `Primary audit solver unavailable (status ${solveAudit.status}). Falling back to /demo/solve_pow for compatibility.`,
-      );
-      const fallback = await fetchJson("/demo/solve_pow", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-API-Key": apiKey(),
-        },
-        body: JSON.stringify({
-          challenges: [auditChallengePayload],
-        }),
-      });
-      ensure(fallback.ok, `Fallback audit proof solve failed (${fallback.status})`);
-      const fallbackProof = fallback.body?.pow_proofs?.[ch.chunk_hash]?.proof;
-      ensure(Boolean(fallbackProof), "Fallback solver returned empty proof");
-      solveAudit = {
-        ok: true,
-        status: 200,
-        body: {
-          challenge_id: ch.challenge_id,
-          chunk_hash: ch.chunk_hash,
-          proof: fallbackProof,
-        },
-      };
-    }
-
-    const verify = await fetchJson("/audit/verify", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": apiKey(),
-      },
-      body: JSON.stringify({
-        challenge_id: ch.challenge_id,
-        proof: solveAudit.body.proof,
-      }),
-    });
-    ensure(verify.ok && verify.body?.verified === true, `Audit verify failed (${verify.status})`);
-
-    const quick = await fetchJson(`/audit/quick/${encodeURIComponent(ctx.mainChunkHash)}`, {
-      headers: {
-        "X-API-Key": apiKey(),
-        "X-Client-ID": ctx.thirdClient,
-      },
-    });
-    ensure(quick.ok, `Quick audit failed (${quick.status})`);
-    return { audit_verified: true, owner_count_after_transfer: transfer.body?.ownership?.owner_count || 0 };
-  });
-
-  await runScenarioCase(suite, "Scenario 7 - Encryption Status And UI Hooks", async () => {
-    const enc = await fetchJson("/demo/encryption", {
-      headers: {
-        "X-API-Key": apiKey(),
-        "X-Client-ID": ctx.mainClient,
-      },
-    });
-    ensure(enc.ok, `Encryption status endpoint failed (${enc.status})`);
-    ensure(typeof enc.body?.encryption_enabled === "boolean", "Missing encryption_enabled in response");
-    return { encryption_enabled: enc.body.encryption_enabled, demo_mode: true };
-  });
-
-  await runScenarioCase(suite, "Scenario 8 - Status And Metrics Summary", async () => {
-    const status = await fetchJson("/demo/status?limit=30");
-    const metrics = await fetchJson("/metrics");
-    ensure(status.ok, `Status endpoint failed (${status.status})`);
-    ensure(metrics.ok, `Metrics endpoint failed (${metrics.status})`);
-    return {
-      active_clients: status.body?.summary?.active_clients || 0,
-      total_buffered_events: status.body?.summary?.total_buffered_events || 0,
-      metrics_keys: Object.keys(metrics.body?.metrics || {}).sort(),
-    };
-  });
-
-  const passed = suite.results.filter((r) => r.status === "PASS").length;
-  suite.summary = {
-    total: suite.results.length,
-    passed,
-    failed: suite.results.length - passed,
-  };
-
-  state.lastSuiteReport = suite;
-  els.suiteReportLog.textContent = pretty(suite);
-  suiteLog(`Scenario suite complete: ${suite.summary.passed}/${suite.summary.total} passed.`);
-  logEvent("Scenario suite report", suite);
-  await refreshOverview();
-  await refreshMetrics();
+  } else {
+    prependLog("Step 2 result", result.body);
+  }
+  await refreshDashboard();
 }
 
-function suiteTimestampForFile(report) {
-  const iso = (report && report.generated_at) || nowIso();
-  return iso.replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "_");
-}
-
-function downloadScenarioReportJson() {
-  if (!els.downloadScenarioJson) {
-    return;
-  }
-  if (!state.lastSuiteReport) {
-    suiteLog("No report available. Run the scenario suite first.");
-    return;
-  }
-  const stamp = suiteTimestampForFile(state.lastSuiteReport);
-  downloadTextFile(
-    `scenario_suite_report_${stamp}.json`,
-    `${JSON.stringify(state.lastSuiteReport, null, 2)}\n`,
-    "application/json",
-  );
-}
-
-function downloadScenarioMetricsCsv() {
-  if (!els.downloadScenarioCsv) {
-    return;
-  }
-  if (!state.lastSuiteReport) {
-    suiteLog("No report available. Run the scenario suite first.");
-    return;
-  }
-  const stamp = suiteTimestampForFile(state.lastSuiteReport);
-  downloadTextFile(
-    `scenario_suite_metrics_${stamp}.csv`,
-    buildSuiteCsv(state.lastSuiteReport),
-    "text/csv",
-  );
-}
-
-async function handleRunScenarioSuite() {
-  if (!els.runScenarioSuite) {
-    return;
-  }
-  if (!apiKey()) {
-    suiteLog("API key is required to run the scenario suite.");
-    return;
-  }
-
-  els.runScenarioSuite.disabled = true;
-  try {
-    await runScenarioSuite();
-  } finally {
-    els.runScenarioSuite.disabled = false;
-  }
-}
-
-async function solvePowChallenges() {
+async function runSolveAndRetry() {
   if (!state.lastChallenges.length) {
-    appendScenario("No pending PoW challenges to solve.");
-    return { ok: false, status: 0, body: { error: "No challenges available" } };
+    await runDuplicateUploadStep();
   }
 
-  const result = await fetchJson("/demo/solve_pow", {
+  if (!state.lastChallenges.length) {
+    els.step3Output.textContent = "No pending challenge is available to solve.";
+    prependLog("Step 3 blocked", "Duplicate upload did not return a challenge.");
+    return;
+  }
+
+  const solve = await fetchJson("/demo/solve_pow", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -842,177 +264,48 @@ async function solvePowChallenges() {
     body: JSON.stringify({ challenges: state.lastChallenges }),
   });
 
-  els.powLog.textContent = pretty(result.body);
-  logEvent("PoW solve", result.body || result);
+  if (!solve.ok || !solve.body?.pow_proofs) {
+    els.step3Output.textContent = pretty(solve.body);
+    prependLog("Step 3 solve failed", solve.body);
+    await refreshDashboard();
+    return;
+  }
 
-  if (result.ok && result.body.pow_proofs) {
-    state.lastProofs = result.body.pow_proofs;
-    appendScenario("PoW proofs generated successfully.");
+  state.lastProofs = solve.body.pow_proofs;
+  const retry = await uploadWithProofs(state.lastProofs);
+  els.step3Output.textContent = pretty({
+    solve: solve.body,
+    retry: retry.body,
+  });
+
+  if (retry.ok) {
+    prependLog("Step 3 complete", "PoW solved and duplicate upload retried successfully.");
+    state.lastChallenges = [];
+    els.challengeOutput.textContent = "Latest challenge solved successfully.";
   } else {
-    appendScenario(`PoW solve failed (${result.status}).`);
+    prependLog("Step 3 retry failed", retry.body);
   }
 
-  return result;
-}
-
-async function retryWithProofs() {
-  if (!state.lastProofs) {
-    appendScenario("No proofs available. Run PoW solve first.");
-    return;
-  }
-  await uploadFile("good");
-}
-
-async function inspectLastChunk() {
-  if (!state.lastChunk) {
-    appendScenario("No chunk to inspect yet. Upload a file first.");
-    return;
-  }
-
-  const result = await fetchJson(`/demo/chunk/${encodeURIComponent(state.lastChunk)}`, {
-    headers: {
-      "X-API-Key": apiKey(),
-    },
-  });
-
-  els.encryptionLog.textContent = pretty(result.body);
-  logEvent("Chunk inspect", result.body || result);
-}
-
-async function forcePolicy(action) {
-  const id = policyClientId();
-  if (!id) {
-    appendScenario("Policy client id missing.");
-    return;
-  }
-
-  const result = await fetchJson("/demo/force-policy", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-API-Key": apiKey(),
-    },
-    body: JSON.stringify({ client_id: id, action }),
-  });
-
-  els.policyLog.textContent = pretty(result.body);
-  logEvent(`Force policy ${action}`, result.body || result);
-  await refreshPolicySnapshot();
-}
-
-async function clearPolicy() {
-  const id = policyClientId();
-  if (!id) {
-    appendScenario("Policy client id missing.");
-    return;
-  }
-
-  const result = await fetchJson("/demo/clear-policy", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-API-Key": apiKey(),
-    },
-    body: JSON.stringify({ client_id: id }),
-  });
-
-  els.policyLog.textContent = pretty(result.body);
-  logEvent("Clear policy", result.body || result);
-  await refreshPolicySnapshot();
-}
-
-async function runBaselineStep() {
-  appendScenario("Step 1: Baseline upload started.");
-  await uploadFile("none");
-  await refreshOverview();
-}
-
-async function runDuplicateStep() {
-  appendScenario("Step 2: Duplicate upload started (expecting PoW challenge).");
-  await uploadFile("none");
-  await refreshOverview();
-}
-
-async function runSolveRetryStep() {
-  appendScenario("Step 3: Solve PoW and retry upload.");
-  if (!state.lastChallenges.length) {
-    appendScenario("No pending challenge found. Triggering duplicate upload first.");
-    await uploadFile("none");
-  }
-  if (!state.lastChallenges.length) {
-    appendScenario("Still no challenge returned; cannot run solve+retry.");
-    return;
-  }
-
-  const solved = await solvePowChallenges();
-  if (solved.ok) {
-    await retryWithProofs();
-  }
-  await refreshOverview();
-  await refreshMetrics();
-}
-
-async function runAttackStep() {
-  appendScenario("Step 4: Bad proof attack simulation started.");
-  if (!state.lastChallenges.length) {
-    appendScenario("No pending challenge. Triggering duplicate upload first.");
-    await uploadFile("none");
-  }
-
-  if (!state.lastChallenges.length) {
-    appendScenario("No challenge available for attack simulation.");
-    return;
-  }
-
-  const attack = await uploadFile("bad");
-  if (!attack.ok) {
-    appendScenario(`Attack request blocked/rejected as expected (status ${attack.status}).`);
-  }
-  await refreshOverview();
-}
-
-async function runFullDemo() {
-  els.scenarioLog.textContent = "Running full demo story...\n";
-  appendScenario("Full story: baseline -> duplicate challenge -> solve+retry -> optional bad-proof attack.");
-  await runBaselineStep();
-  await runDuplicateStep();
-  await runSolveRetryStep();
-  await runAttackStep();
-  appendScenario("Full demo story completed.");
+  await refreshDashboard();
 }
 
 els.fileInput?.addEventListener("change", (event) => {
   state.selectedFile = event.target.files[0] || null;
   if (state.selectedFile) {
-    els.fileMeta.textContent = `Selected: ${state.selectedFile.name} (${state.selectedFile.size} bytes)`;
-    logEvent("File selected", {
+    els.fileMeta.textContent = `Selected file: ${state.selectedFile.name} (${state.selectedFile.size} bytes)`;
+    prependLog("File selected", {
       name: state.selectedFile.name,
       size: state.selectedFile.size,
       type: state.selectedFile.type,
     });
   } else {
-    els.fileMeta.textContent = "No file selected. Auto-generated demo payload will be used.";
+    els.fileMeta.textContent = "No file selected. The text above will be turned into a demo file.";
   }
 });
 
-els.runFullDemo?.addEventListener("click", runFullDemo);
-els.runBaselineStep?.addEventListener("click", runBaselineStep);
-els.runDuplicateStep?.addEventListener("click", runDuplicateStep);
-els.runSolveRetryStep?.addEventListener("click", runSolveRetryStep);
-els.runAttackStep?.addEventListener("click", runAttackStep);
-els.runScenarioSuite?.addEventListener("click", handleRunScenarioSuite);
-els.downloadScenarioJson?.addEventListener("click", downloadScenarioReportJson);
-els.downloadScenarioCsv?.addEventListener("click", downloadScenarioMetricsCsv);
-els.uploadOnce?.addEventListener("click", () => uploadFile("none"));
-els.uploadDuplicate?.addEventListener("click", () => uploadFile("none"));
-els.solvePow?.addEventListener("click", solvePowChallenges);
-els.retryUpload?.addEventListener("click", retryWithProofs);
-els.inspectChunk?.addEventListener("click", inspectLastChunk);
-els.forceRateLimit?.addEventListener("click", () => forcePolicy("RATE_LIMIT"));
-els.forceBlock?.addEventListener("click", () => forcePolicy("BLOCK"));
-els.clearPolicy?.addEventListener("click", clearPolicy);
-els.refreshOverview?.addEventListener("click", refreshOverview);
-els.refreshMetrics?.addEventListener("click", refreshMetrics);
+els.refreshDashboard?.addEventListener("click", refreshDashboard);
+els.stepUploadOriginal?.addEventListener("click", runOriginalUploadStep);
+els.stepTriggerPow?.addEventListener("click", runDuplicateUploadStep);
+els.stepSolveAndRetry?.addEventListener("click", runSolveAndRetry);
 
-refreshOverview();
-refreshMetrics();
+refreshDashboard();
