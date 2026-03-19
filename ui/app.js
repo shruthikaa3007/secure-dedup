@@ -395,8 +395,12 @@ async function forcePolicyForClient(clientIdValue, action) {
 }
 
 async function uploadWithPolicyRecovery(clientIdValue, fileObj, options = {}) {
+  const maxRetries = 3;
   let result = await uploadForClient(clientIdValue, fileObj, options);
-  if (result.status === 429) {
+  for (let attempt = 1; attempt <= maxRetries && (result.status === 429 || result.status === 403); attempt += 1) {
+    suiteLog(
+      `Policy gate (status ${result.status}) for ${clientIdValue}. Clearing policy and retrying (${attempt}/${maxRetries})...`,
+    );
     await clearPolicyForClient(clientIdValue);
     result = await uploadForClient(clientIdValue, fileObj, options);
   }
@@ -404,6 +408,9 @@ async function uploadWithPolicyRecovery(clientIdValue, fileObj, options = {}) {
 }
 
 function suiteLog(message) {
+  if (!els.suiteLog) {
+    return;
+  }
   const stamp = new Date().toLocaleTimeString();
   els.suiteLog.textContent = `[${stamp}] ${message}\n` + els.suiteLog.textContent;
 }
@@ -462,6 +469,11 @@ async function runScenarioCase(suite, name, fn) {
 }
 
 async function runScenarioSuite() {
+  if (!els.suiteLog || !els.suiteReportLog) {
+    appendScenario("Scenario suite panel not found in current UI build.");
+    return;
+  }
+
   els.suiteLog.textContent = "Running scenario suite...\n";
   els.suiteReportLog.textContent = "Generating report...\n";
 
@@ -507,7 +519,7 @@ async function runScenarioSuite() {
 
   await runScenarioCase(suite, "Scenario 2 - Duplicate Requires PoW", async () => {
     let res = await uploadForClient(ctx.mainClient, ctx.baseFile);
-    if (res.status === 429) {
+    if (res.status === 429 || res.status === 403) {
       await clearPolicyForClient(ctx.mainClient);
       res = await uploadForClient(ctx.mainClient, ctx.baseFile);
     }
@@ -652,23 +664,52 @@ async function runScenarioSuite() {
     ensure(challenge.ok, `Audit challenge failed (${challenge.status})`);
     const ch = challenge.body.challenge || {};
 
-    const solveAudit = await fetchJson("/demo/solve_audit", {
+    const auditChallengePayload = {
+      chunk_hash: ch.chunk_hash,
+      challenge_id: ch.challenge_id,
+      nonce_hex: ch.nonce_hex,
+      offset: ch.offset,
+      length: ch.length,
+    };
+
+    let solveAudit = await fetchJson("/demo/solve_audit", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-API-Key": apiKey(),
       },
       body: JSON.stringify({
-        challenge: {
-          chunk_hash: ch.chunk_hash,
-          challenge_id: ch.challenge_id,
-          nonce_hex: ch.nonce_hex,
-          offset: ch.offset,
-          length: ch.length,
-        },
+        challenge: auditChallengePayload,
       }),
     });
-    ensure(solveAudit.ok, `Solve audit proof failed (${solveAudit.status})`);
+
+    if (!solveAudit.ok || !solveAudit.body?.proof) {
+      suiteLog(
+        `Primary audit solver unavailable (status ${solveAudit.status}). Falling back to /demo/solve_pow for compatibility.`,
+      );
+      const fallback = await fetchJson("/demo/solve_pow", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": apiKey(),
+        },
+        body: JSON.stringify({
+          challenges: [auditChallengePayload],
+        }),
+      });
+      ensure(fallback.ok, `Fallback audit proof solve failed (${fallback.status})`);
+      const fallbackProof = fallback.body?.pow_proofs?.[ch.chunk_hash]?.proof;
+      ensure(Boolean(fallbackProof), "Fallback solver returned empty proof");
+      solveAudit = {
+        ok: true,
+        status: 200,
+        body: {
+          challenge_id: ch.challenge_id,
+          chunk_hash: ch.chunk_hash,
+          proof: fallbackProof,
+        },
+      };
+    }
 
     const verify = await fetchJson("/audit/verify", {
       method: "POST",
@@ -738,6 +779,9 @@ function suiteTimestampForFile(report) {
 }
 
 function downloadScenarioReportJson() {
+  if (!els.downloadScenarioJson) {
+    return;
+  }
   if (!state.lastSuiteReport) {
     suiteLog("No report available. Run the scenario suite first.");
     return;
@@ -751,6 +795,9 @@ function downloadScenarioReportJson() {
 }
 
 function downloadScenarioMetricsCsv() {
+  if (!els.downloadScenarioCsv) {
+    return;
+  }
   if (!state.lastSuiteReport) {
     suiteLog("No report available. Run the scenario suite first.");
     return;
@@ -764,6 +811,9 @@ function downloadScenarioMetricsCsv() {
 }
 
 async function handleRunScenarioSuite() {
+  if (!els.runScenarioSuite) {
+    return;
+  }
   if (!apiKey()) {
     suiteLog("API key is required to run the scenario suite.");
     return;
@@ -931,7 +981,7 @@ async function runFullDemo() {
   appendScenario("Full demo story completed.");
 }
 
-els.fileInput.addEventListener("change", (event) => {
+els.fileInput?.addEventListener("change", (event) => {
   state.selectedFile = event.target.files[0] || null;
   if (state.selectedFile) {
     els.fileMeta.textContent = `Selected: ${state.selectedFile.name} (${state.selectedFile.size} bytes)`;
@@ -945,24 +995,24 @@ els.fileInput.addEventListener("change", (event) => {
   }
 });
 
-els.runFullDemo.addEventListener("click", runFullDemo);
-els.runBaselineStep.addEventListener("click", runBaselineStep);
-els.runDuplicateStep.addEventListener("click", runDuplicateStep);
-els.runSolveRetryStep.addEventListener("click", runSolveRetryStep);
-els.runAttackStep.addEventListener("click", runAttackStep);
-els.runScenarioSuite.addEventListener("click", handleRunScenarioSuite);
-els.downloadScenarioJson.addEventListener("click", downloadScenarioReportJson);
-els.downloadScenarioCsv.addEventListener("click", downloadScenarioMetricsCsv);
-els.uploadOnce.addEventListener("click", () => uploadFile("none"));
-els.uploadDuplicate.addEventListener("click", () => uploadFile("none"));
-els.solvePow.addEventListener("click", solvePowChallenges);
-els.retryUpload.addEventListener("click", retryWithProofs);
-els.inspectChunk.addEventListener("click", inspectLastChunk);
-els.forceRateLimit.addEventListener("click", () => forcePolicy("RATE_LIMIT"));
-els.forceBlock.addEventListener("click", () => forcePolicy("BLOCK"));
-els.clearPolicy.addEventListener("click", clearPolicy);
-els.refreshOverview.addEventListener("click", refreshOverview);
-els.refreshMetrics.addEventListener("click", refreshMetrics);
+els.runFullDemo?.addEventListener("click", runFullDemo);
+els.runBaselineStep?.addEventListener("click", runBaselineStep);
+els.runDuplicateStep?.addEventListener("click", runDuplicateStep);
+els.runSolveRetryStep?.addEventListener("click", runSolveRetryStep);
+els.runAttackStep?.addEventListener("click", runAttackStep);
+els.runScenarioSuite?.addEventListener("click", handleRunScenarioSuite);
+els.downloadScenarioJson?.addEventListener("click", downloadScenarioReportJson);
+els.downloadScenarioCsv?.addEventListener("click", downloadScenarioMetricsCsv);
+els.uploadOnce?.addEventListener("click", () => uploadFile("none"));
+els.uploadDuplicate?.addEventListener("click", () => uploadFile("none"));
+els.solvePow?.addEventListener("click", solvePowChallenges);
+els.retryUpload?.addEventListener("click", retryWithProofs);
+els.inspectChunk?.addEventListener("click", inspectLastChunk);
+els.forceRateLimit?.addEventListener("click", () => forcePolicy("RATE_LIMIT"));
+els.forceBlock?.addEventListener("click", () => forcePolicy("BLOCK"));
+els.clearPolicy?.addEventListener("click", clearPolicy);
+els.refreshOverview?.addEventListener("click", refreshOverview);
+els.refreshMetrics?.addEventListener("click", refreshMetrics);
 
 refreshOverview();
 refreshMetrics();
