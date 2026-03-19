@@ -137,6 +137,10 @@ h3 {
   gap: 10px;
 }
 
+.hero-actions {
+  margin-top: 8px;
+}
+
 .metric-grid,
 .step-grid,
 .detail-grid,
@@ -177,6 +181,10 @@ h3 {
 
 .setup-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.setup-grid.single {
+  grid-template-columns: 1fr;
 }
 
 .setup-stack {
@@ -221,6 +229,23 @@ textarea {
   padding: 16px;
   background: rgba(31, 107, 99, 0.05);
   cursor: pointer;
+}
+
+.advanced-panel {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(28, 43, 47, 0.03);
+  padding: 14px 16px;
+}
+
+.advanced-panel summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--accent-strong);
+}
+
+.advanced-panel .setup-grid {
+  margin-top: 14px;
 }
 
 .file-picker input {

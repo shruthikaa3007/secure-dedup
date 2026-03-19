@@ -13,17 +13,21 @@
       <section class="hero">
         <div class="hero-copy">
           <p class="eyebrow">Secure Deduplication Prototype</p>
-          <h1>Simple duplicate verification, one step at a time.</h1>
+          <h1>Reviewer-ready secure deduplication demo.</h1>
           <p class="lead">
-            The final project is now centered on one clean story: store encrypted chunks once, challenge duplicate claims
-            with proof-of-ownership, and keep behavioural monitoring visible through clear runtime activity metrics.
+            This demo is designed for presentation: it creates a fresh session, stores encrypted chunks by default,
+            walks through duplicate verification step by step, and keeps behavioural monitoring visible without turning
+            the screen into an operator console.
           </p>
         </div>
         <div class="hero-card">
-          <p class="mini-label">Project Definition</p>
-          <h2>Encrypted chunk storage + PoW duplicate checks</h2>
+          <p class="mini-label">Reviewer Story</p>
+          <h2>Encrypt once, challenge duplicates, monitor behaviour.</h2>
           <p>Base paper: Peng et al., IEEE TNSM 2025.</p>
-          <p>Improvement: chunk-hash-bound segmented AES-GCM, a visible step-wise PoW upload flow, and lightweight behavioural monitoring.</p>
+          <p>Improvement: chunk-hash-bound segmented AES-GCM, a visible PoW retry flow, and lightweight behavioural monitoring.</p>
+          <div class="hero-actions">
+            <button class="secondary" id="startNewSession">Start New Demo Session</button>
+          </div>
         </div>
       </section>
 
@@ -68,18 +72,14 @@
       <section class="panel">
         <div class="panel-head">
           <div>
-            <h2>Setup</h2>
-            <p>Pick one file or use the text box. The same content is reused across all three steps.</p>
+            <h2>Demo Input</h2>
+            <p>Use the generated reviewer payload or replace it with your own file. The same content is reused across all three steps.</p>
           </div>
           <button class="secondary" id="refreshDashboard">Refresh Dashboard</button>
         </div>
-        <div class="setup-grid">
+        <div class="setup-grid single">
           <label>
-            <span>API Key</span>
-            <input id="apiKey" type="text" value="dev-api-key" />
-          </label>
-          <label>
-            <span>Client ID</span>
+            <span>Session Client ID</span>
             <input id="clientId" type="text" value="demo-client-1" />
           </label>
         </div>
@@ -93,6 +93,15 @@
             <span>Select file instead</span>
           </label>
           <p class="metric-meta" id="fileMeta">No file selected. The text above will be turned into a demo file.</p>
+          <details class="advanced-panel">
+            <summary>Advanced settings</summary>
+            <div class="setup-grid">
+              <label>
+                <span>API Key</span>
+                <input id="apiKey" type="text" value="dev-api-key" />
+              </label>
+            </div>
+          </details>
         </div>
       </section>
 
@@ -100,7 +109,7 @@
         <article class="panel step-panel">
           <p class="step-tag">Step 1</p>
           <h3>Upload Original File</h3>
-          <p>Store the first encrypted copy and create the initial file record.</p>
+          <p>Store the first encrypted copy and create the initial file record for this session.</p>
           <button class="primary" id="stepUploadOriginal">Step 1: Upload Original File</button>
           <pre id="step1Output">Ready.</pre>
         </article>

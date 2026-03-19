@@ -13,10 +13,30 @@ _NONCE_LEN = 12
 _TAG_LEN = 16
 _SEGMENT_SIZE_DEFAULT = 4096
 _LEN_STRUCT = struct.Struct(">I")
+_DEMO_DEFAULT_KEY_B64 = "c2VjdXJlLWRlZHVwLWRlbW8ta2V5LTMyYnl0ZXMhISE="
+
+
+def _is_truthy(raw: str, default: bool = False) -> bool:
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _resolve_key_material() -> tuple[str, str]:
+    raw = os.getenv("CHUNK_ENCRYPTION_KEY", "").strip()
+    if raw:
+        return raw, "env"
+
+    demo_mode = _is_truthy(os.getenv("DEMO_MODE", "true"), default=True)
+    default_on = _is_truthy(os.getenv("CHUNK_ENCRYPTION_DEFAULT_ON", "true"), default=True)
+    if demo_mode and default_on:
+        return _DEMO_DEFAULT_KEY_B64, "demo_default"
+
+    return "", "disabled"
 
 
 def _load_key() -> bytes:
-    raw = os.getenv("CHUNK_ENCRYPTION_KEY", "").strip()
+    raw, _ = _resolve_key_material()
     if not raw:
         return b""
 
@@ -156,17 +176,20 @@ def payload_uses_envelope(data: bytes) -> bool:
 
 def encryption_status() -> dict:
     try:
+        _, key_source = _resolve_key_material()
         key = _load_key()
         status = {
             "enabled": bool(key),
             "key_bytes": len(key) if key else 0,
             "strict": _strict_mode(),
+            "key_source": key_source,
         }
     except Exception as exc:
         status = {
             "enabled": False,
             "key_bytes": 0,
             "strict": _strict_mode(),
+            "key_source": "error",
             "error": str(exc),
         }
     try:

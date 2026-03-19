@@ -7,6 +7,7 @@ const els = {
   fileInput: byId("fileInput"),
   fileMeta: byId("fileMeta"),
   refreshDashboard: byId("refreshDashboard"),
+  startNewSession: byId("startNewSession"),
   stepUploadOriginal: byId("stepUploadOriginal"),
   stepTriggerPow: byId("stepTriggerPow"),
   stepSolveAndRetry: byId("stepSolveAndRetry"),
@@ -35,6 +36,7 @@ const state = {
   selectedFile: null,
   lastChallenges: [],
   lastProofs: null,
+  sessionId: "",
 };
 
 function pretty(payload) {
@@ -65,10 +67,51 @@ function clientId() {
   return (els.clientId.value || "").trim();
 }
 
+function makeSessionId() {
+  return `reviewer-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+function defaultDemoContent(sessionId) {
+  return [
+    "Secure dedup reviewer demo payload",
+    `session: ${sessionId}`,
+    `generated_at: ${new Date().toISOString()}`,
+  ].join("\n");
+}
+
+function usingAutoPayload() {
+  return !state.selectedFile;
+}
+
+function resetOutputs() {
+  els.step1Output.textContent = "Ready.";
+  els.step2Output.textContent = "No duplicate attempt yet.";
+  els.step3Output.textContent = "No solve attempt yet.";
+  els.challengeOutput.textContent = "No challenge returned yet.";
+}
+
+function startNewSession({ refresh = true } = {}) {
+  state.sessionId = makeSessionId();
+  state.lastChallenges = [];
+  state.lastProofs = null;
+  els.clientId.value = state.sessionId;
+  if (!state.selectedFile) {
+    els.demoContent.value = defaultDemoContent(state.sessionId);
+  }
+  resetOutputs();
+  prependLog("New reviewer session", {
+    client_id: state.sessionId,
+  });
+  if (refresh) {
+    refreshDashboard();
+  }
+}
+
 function defaultHeaders(withClientId = true) {
-  const headers = {
-    "X-API-Key": apiKey(),
-  };
+  const headers = {};
+  if (apiKey()) {
+    headers["X-API-Key"] = apiKey();
+  }
   if (withClientId) {
     headers["X-Client-ID"] = clientId();
   }
@@ -104,6 +147,21 @@ async function fetchJson(path, options = {}) {
   }
 }
 
+async function clearCurrentPolicy() {
+  if (!clientId()) {
+    return { ok: false, status: 0, body: { error: "Missing client id" } };
+  }
+
+  return fetchJson("/demo/clear-policy", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...defaultHeaders(false),
+    },
+    body: JSON.stringify({ client_id: clientId() }),
+  });
+}
+
 function effectiveDemoFile() {
   if (state.selectedFile) {
     return {
@@ -122,20 +180,29 @@ function effectiveDemoFile() {
   };
 }
 
-async function uploadWithProofs(powProofs = null) {
+async function uploadWithProofs(powProofs = null, { autoRecoverPolicy = true } = {}) {
   const demoFile = effectiveDemoFile();
-  const form = new FormData();
-  form.append("file", demoFile.payload, demoFile.name);
+  const runUpload = async () => {
+    const form = new FormData();
+    form.append("file", demoFile.payload, demoFile.name);
 
-  if (powProofs) {
-    form.append("pow_proofs_json", JSON.stringify(powProofs));
+    if (powProofs) {
+      form.append("pow_proofs_json", JSON.stringify(powProofs));
+    }
+
+    return fetchJson("/upload", {
+      method: "POST",
+      headers: defaultHeaders(true),
+      body: form,
+    });
+  };
+
+  let result = await runUpload();
+  if (autoRecoverPolicy && (result.status === 403 || result.status === 429)) {
+    prependLog("Policy recovery", "Clearing active demo policy and retrying once.");
+    await clearCurrentPolicy();
+    result = await runUpload();
   }
-
-  const result = await fetchJson("/upload", {
-    method: "POST",
-    headers: defaultHeaders(true),
-    body: form,
-  });
 
   prependLog("Upload request", {
     file_name: demoFile.name,
@@ -215,7 +282,12 @@ async function runOriginalUploadStep() {
   state.lastProofs = null;
   els.challengeOutput.textContent = "No challenge returned yet.";
 
-  const result = await uploadWithProofs(null);
+  let result = await uploadWithProofs(null);
+  if (result.status === 409 && usingAutoPayload()) {
+    prependLog("Fresh payload recovery", "Generated content already existed, starting a fresh reviewer session and retrying.");
+    startNewSession({ refresh: false });
+    result = await uploadWithProofs(null);
+  }
   els.step1Output.textContent = pretty(result.body);
   if (result.ok) {
     prependLog("Step 1 complete", "Original upload stored successfully.");
@@ -259,7 +331,7 @@ async function runSolveAndRetry() {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-API-Key": apiKey(),
+      ...defaultHeaders(false),
     },
     body: JSON.stringify({ challenges: state.lastChallenges }),
   });
@@ -304,8 +376,10 @@ els.fileInput?.addEventListener("change", (event) => {
 });
 
 els.refreshDashboard?.addEventListener("click", refreshDashboard);
+els.startNewSession?.addEventListener("click", () => startNewSession());
 els.stepUploadOriginal?.addEventListener("click", runOriginalUploadStep);
 els.stepTriggerPow?.addEventListener("click", runDuplicateUploadStep);
 els.stepSolveAndRetry?.addEventListener("click", runSolveAndRetry);
 
+startNewSession({ refresh: false });
 refreshDashboard();
