@@ -23,7 +23,8 @@ This project is now defined around one primary pipeline:
 4. detect duplicate claims,
 5. require proof-of-ownership before duplicate reuse,
 6. keep behavioural monitoring visible through request telemetry,
-7. show clear metrics for dedup savings and PoW behavior.
+7. show clear metrics for dedup savings and PoW behavior,
+8. demonstrate the storage path on a reproducible LocalStack S3 environment.
 
 ## Novelty Over the Base Paper
 
@@ -40,6 +41,9 @@ The repo should present two concrete improvements clearly:
 
 Behavioural monitoring remains a supporting layer:
 recent client activity and request volume stay visible in the dashboard and metrics, but they no longer dominate the UI.
+
+Deployment stance:
+the main demo environment is LocalStack S3 on a local reproducible stack, not a fragile hosted web deployment.
 
 ## What Counts As "Complete"
 

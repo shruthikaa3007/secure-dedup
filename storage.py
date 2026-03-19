@@ -1,4 +1,5 @@
 import os
+import time
 from io import BytesIO
 from pathlib import Path
 
@@ -31,6 +32,10 @@ MINIO_SECURE = os.getenv("MINIO_SECURE", "false").lower() == "true"
 BUCKET = os.getenv("S3_BUCKET", os.getenv("MINIO_BUCKET", "chunks"))
 
 _LOCAL_STORE_DIR = Path(os.getenv("LOCAL_CHUNK_DIR", "local_chunks"))
+_S3_RETRY_INTERVAL_SEC = float(os.getenv("S3_INIT_RETRY_INTERVAL_SEC", "2.0"))
+_MINIO_RETRY_INTERVAL_SEC = float(os.getenv("MINIO_INIT_RETRY_INTERVAL_SEC", "2.0"))
+_last_s3_init_attempt = 0.0
+_last_minio_init_attempt = 0.0
 
 
 def _init_local_store_dir() -> Path:
@@ -50,11 +55,27 @@ def _init_local_store_dir() -> Path:
     return final_fallback
 
 _s3_client = None
-if STORAGE_BACKEND in {"auto", "localstack", "s3"} and boto3 is not None:
+_minio_client = None
+
+
+def _now() -> float:
+    return time.time()
+
+
+def _init_s3_client():
+    global _s3_client, _last_s3_init_attempt
+    if _s3_client is not None:
+        return _s3_client
+    if STORAGE_BACKEND not in {"auto", "localstack", "s3"} or boto3 is None:
+        return None
+    if (_now() - _last_s3_init_attempt) < _S3_RETRY_INTERVAL_SEC:
+        return None
+
+    _last_s3_init_attempt = _now()
     try:
         endpoint_url = LOCALSTACK_ENDPOINT if STORAGE_BACKEND in {"auto", "localstack"} else None
         s3_config = BotoConfig(s3={"addressing_style": "path"}) if BotoConfig is not None else None
-        _s3_client = boto3.client(
+        client = boto3.client(
             "s3",
             endpoint_url=endpoint_url,
             aws_access_key_id=AWS_ACCESS_KEY_ID,
@@ -64,47 +85,80 @@ if STORAGE_BACKEND in {"auto", "localstack", "s3"} and boto3 is not None:
         )
 
         try:
-            _s3_client.head_bucket(Bucket=BUCKET)
+            client.head_bucket(Bucket=BUCKET)
         except Exception:
-            _s3_client.create_bucket(Bucket=BUCKET)
+            client.create_bucket(Bucket=BUCKET)
+
+        _s3_client = client
     except Exception:
         _s3_client = None
+    return _s3_client
 
-_minio_client = None
-if _s3_client is None and STORAGE_BACKEND in {"auto", "minio"} and Minio is not None:
+
+def _init_minio_client():
+    global _minio_client, _last_minio_init_attempt
+    if _minio_client is not None:
+        return _minio_client
+    if STORAGE_BACKEND not in {"auto", "minio"} or Minio is None:
+        return None
+    if (_now() - _last_minio_init_attempt) < _MINIO_RETRY_INTERVAL_SEC:
+        return None
+
+    _last_minio_init_attempt = _now()
     try:
-        _minio_client = Minio(
+        client = Minio(
             MINIO_ENDPOINT,
             access_key=MINIO_ACCESS_KEY,
             secret_key=MINIO_SECRET_KEY,
             secure=MINIO_SECURE,
         )
-        if not _minio_client.bucket_exists(BUCKET):
-            _minio_client.make_bucket(BUCKET)
+        if not client.bucket_exists(BUCKET):
+            client.make_bucket(BUCKET)
+        _minio_client = client
     except Exception:
         _minio_client = None
+    return _minio_client
 
-if _s3_client is None and _minio_client is None:
-    _LOCAL_STORE_DIR = _init_local_store_dir()
+
+def _ensure_backend_clients():
+    global _LOCAL_STORE_DIR
+    _init_s3_client()
+    if _s3_client is None:
+        _init_minio_client()
+    if _s3_client is None and _minio_client is None:
+        _LOCAL_STORE_DIR = _init_local_store_dir()
+
+
+_ensure_backend_clients()
 
 
 def storage_status() -> dict:
+    _ensure_backend_clients()
     if _s3_client is not None:
         return {
-            "backend": "s3",
+            "backend": "localstack" if STORAGE_BACKEND == "localstack" else "s3",
+            "configured_backend": STORAGE_BACKEND,
             "bucket": BUCKET,
+            "endpoint": LOCALSTACK_ENDPOINT if STORAGE_BACKEND == "localstack" else None,
             "local_dir": str(_LOCAL_STORE_DIR),
+            "fallback_active": False,
         }
     if _minio_client is not None:
         return {
             "backend": "minio",
+            "configured_backend": STORAGE_BACKEND,
             "bucket": BUCKET,
+            "endpoint": MINIO_ENDPOINT,
             "local_dir": str(_LOCAL_STORE_DIR),
+            "fallback_active": False,
         }
     return {
         "backend": "filesystem",
+        "configured_backend": STORAGE_BACKEND,
         "bucket": None,
+        "endpoint": None,
         "local_dir": str(_LOCAL_STORE_DIR),
+        "fallback_active": STORAGE_BACKEND in {"auto", "localstack", "s3", "minio"},
     }
 
 
@@ -112,6 +166,7 @@ def upload_chunk(chunk_hash: str, data: bytes):
     """
     Store chunk in object storage backend, fallback to local filesystem.
     """
+    _ensure_backend_clients()
     payload = encrypt_chunk(data, context=chunk_hash)
 
     if _s3_client is not None:
@@ -140,6 +195,7 @@ def get_chunk_raw(chunk_hash: str) -> bytes:
     """
     Retrieve raw stored chunk from backend without decryption.
     """
+    _ensure_backend_clients()
     if _s3_client is not None:
         response = _s3_client.get_object(Bucket=BUCKET, Key=chunk_hash)
         try:
@@ -174,6 +230,7 @@ def delete_chunk(chunk_hash: str) -> None:
     """
     Delete chunk from storage backend if present.
     """
+    _ensure_backend_clients()
     if _s3_client is not None:
         try:
             _s3_client.delete_object(Bucket=BUCKET, Key=chunk_hash)
@@ -195,6 +252,7 @@ def delete_chunk(chunk_hash: str) -> None:
 
 def get_chunk_envelope_info(chunk_hash: str):
     """Inspect stored payload envelope without decrypting chunk contents."""
+    _ensure_backend_clients()
     if _s3_client is not None:
         response = _s3_client.get_object(Bucket=BUCKET, Key=chunk_hash)
         try:

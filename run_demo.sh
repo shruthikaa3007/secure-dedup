@@ -32,7 +32,15 @@ start_stack() {
     echo "docker not found; skipping local stack startup"
     return
   fi
-  docker compose -f "$STACK_FILE" up -d
+  docker compose -f "$STACK_FILE" up -d redis localstack
+}
+
+start_cloud_stack() {
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "docker not found; cannot start LocalStack cloud demo"
+    exit 1
+  fi
+  docker compose -f "$STACK_FILE" up -d --build
 }
 
 wait_for_localstack() {
@@ -54,6 +62,19 @@ stop_stack() {
     return
   fi
   docker compose -f "$STACK_FILE" down
+}
+
+wait_for_api() {
+  local base_url="${BASE_URL:-http://127.0.0.1:${APP_PORT}}"
+  echo "Waiting for API at ${base_url} ..."
+  for _ in $(seq 1 30); do
+    if curl -fsS "${base_url}/health" >/dev/null 2>&1; then
+      echo "API is reachable."
+      return
+    fi
+    sleep 1
+  done
+  echo "Warning: API not reachable yet."
 }
 
 run_api() {
@@ -87,6 +108,9 @@ run_smoke_test() {
   echo "Health check..."
   curl -fsS "${base_url}/health" && echo
 
+  echo "Config check..."
+  curl -fsS "${base_url}/demo/config" && echo
+
   local sample_file
   sample_file="$(mktemp /tmp/secure-dedup-demo-XXXXXX.txt)"
   echo "hello dedup demo" > "$sample_file"
@@ -111,9 +135,10 @@ usage() {
 Usage: ./run_demo.sh <command>
 
 Commands:
-  start   Start local stack (Redis + LocalStack S3) and run API
-  stop    Stop local stack
-  test    Run smoke test against running API
+  start        Start LocalStack dependencies and run API from local venv
+  cloud-start  Start full LocalStack cloud demo in Docker (Redis + LocalStack + app)
+  stop         Stop LocalStack/demo containers
+  test         Run smoke test against running API
 EOF
 }
 
@@ -125,6 +150,13 @@ case "$cmd" in
     start_stack
     wait_for_localstack
     run_api
+    ;;
+  cloud-start)
+    export BASE_URL="${BASE_URL:-http://127.0.0.1:${APP_PORT}}"
+    start_cloud_stack
+    wait_for_localstack
+    wait_for_api
+    echo "Open ${BASE_URL}/ui/"
     ;;
   stop)
     stop_stack

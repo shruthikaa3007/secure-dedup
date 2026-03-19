@@ -28,33 +28,55 @@ Secondary research modules remain in the repo, but the primary runtime path and 
 - `storage.py`, `dedup_index.py`, `ownership_store.py`, `file_catalog.py`: chunk storage, dedup references, ownership, and file versions.
 - `ui/`: simplified step-by-step web UI.
 - `tests/run_smoke_tests.py`: local isolated smoke validation.
-- `tests/run_deployment_smoke.py`: deployment-facing smoke tests for Render/Railway/other hosted URLs.
-- `notebooks/deployment_smoke_colab.ipynb`: Colab notebook that runs the deployment smoke test and shows results.
+- `docker-compose.local.yml`: LocalStack-based local cloud stack (app + Redis + LocalStack S3).
+- `run_demo.sh`: local dev and LocalStack cloud startup commands.
+- `tests/run_deployment_smoke.py`: optional hosted smoke test for remote URLs.
+- `notebooks/deployment_smoke_colab.ipynb`: optional hosted smoke notebook.
 
-## Local Run
+## Local Cloud Run (LocalStack / AWS-like)
 
-Install dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-Optional encryption key:
+Start the full local cloud demo:
 
 ```bash
-python generate_encryption_key.py
+./run_demo.sh cloud-start
 ```
 
-Run the service:
-
-```bash
-uvicorn app:app --reload
-```
-
-Open the guided UI:
+Open:
 
 ```text
 http://127.0.0.1:8000/ui/
+```
+
+This path runs:
+
+- the app in Docker
+- Redis
+- LocalStack S3
+- encryption enabled by default
+
+The UI shows the storage backend explicitly, so reviewers can see the app is using LocalStack S3 rather than plain local files.
+
+Stop the stack:
+
+```bash
+./run_demo.sh stop
+```
+
+Smoke check the running stack:
+
+```bash
+./run_demo.sh test
+```
+
+## Local Dev Run
+
+If you want to run the API from the local venv while still using LocalStack:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+./run_demo.sh start
 ```
 
 ## Guided Demo Flow
@@ -67,6 +89,7 @@ The UI is intentionally small now. It walks through three steps:
 
 The dashboard surfaces only the metrics needed for the thesis/demo story:
 
+- storage backend
 - active files
 - unique chunks
 - dedup saved chunks
@@ -80,16 +103,16 @@ The dashboard surfaces only the metrics needed for the thesis/demo story:
 Run the isolated smoke suite:
 
 ```bash
-python tests/run_smoke_tests.py
+./.venv/bin/python tests/run_smoke_tests.py
 ```
 
 Run the broader local scenario suite:
 
 ```bash
-python tests/run_scenario_suite.py
+./.venv/bin/python tests/run_scenario_suite.py
 ```
 
-## Deployment Smoke Test
+## Optional Hosted Smoke Test
 
 Set deployment values:
 
@@ -116,7 +139,7 @@ This test verifies:
 
 ## Colab Notebook
 
-Use [notebooks/deployment_smoke_colab.ipynb](/Users/shruthikaa.s/untitled%20folder/Project/secure-dedup/notebooks/deployment_smoke_colab.ipynb) to run the deployment smoke flow from Google Colab and display the latest JSON/Markdown report.
+Use [notebooks/deployment_smoke_colab.ipynb](/Users/shruthikaa.s/untitled%20folder/Project/secure-dedup/notebooks/deployment_smoke_colab.ipynb) only if you still want a hosted smoke run. It is no longer the primary demo path.
 
 ## Cleanup Notes
 

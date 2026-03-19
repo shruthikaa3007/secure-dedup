@@ -15,6 +15,8 @@ const els = {
   healthMeta: byId("healthMeta"),
   encryptionValue: byId("encryptionValue"),
   encryptionMeta: byId("encryptionMeta"),
+  storageValue: byId("storageValue"),
+  storageMeta: byId("storageMeta"),
   activeFilesValue: byId("activeFilesValue"),
   uniqueChunksValue: byId("uniqueChunksValue"),
   dedupSavedValue: byId("dedupSavedValue"),
@@ -265,6 +267,27 @@ async function refreshDashboard() {
   } else {
     els.healthValue.textContent = "Error";
     els.healthMeta.textContent = `Health check failed (${health.status || "network"})`;
+  }
+
+  if (config.ok) {
+    const storage = config.body.storage || {};
+    els.storageValue.textContent = storage.backend || "Unknown";
+    if (storage.backend === "localstack") {
+      els.storageMeta.textContent = storage.bucket
+        ? `LocalStack S3 bucket: ${storage.bucket}`
+        : "LocalStack S3";
+    } else if (storage.backend === "s3") {
+      els.storageMeta.textContent = storage.bucket ? `S3 bucket: ${storage.bucket}` : "AWS S3";
+    } else if (storage.backend === "filesystem") {
+      els.storageMeta.textContent = storage.configured_backend === "localstack"
+        ? "Waiting for LocalStack, filesystem fallback active"
+        : "Filesystem fallback";
+    } else {
+      els.storageMeta.textContent = storage.bucket || "Storage status loaded";
+    }
+  } else {
+    els.storageValue.textContent = "Error";
+    els.storageMeta.textContent = "Failed to load storage config";
   }
 
   if (metrics.ok) {

@@ -1,3 +1,4 @@
+import os
 from typing import Dict
 
 try:
@@ -5,13 +6,17 @@ try:
 except Exception:
     redis = None
 
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+REDIS_DB = int(os.getenv("REDIS_DB", "0"))
+
 r = None
 if redis is not None:
     try:
         r = redis.Redis(
-            host="localhost",
-            port=6379,
-            db=0,
+            host=REDIS_HOST,
+            port=REDIS_PORT,
+            db=REDIS_DB,
             decode_responses=True,
         )
     except Exception:
