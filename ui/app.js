@@ -12,6 +12,9 @@ const els = {
   runDuplicateStep: byId("runDuplicateStep"),
   runSolveRetryStep: byId("runSolveRetryStep"),
   runAttackStep: byId("runAttackStep"),
+  runScenarioSuite: byId("runScenarioSuite"),
+  downloadScenarioJson: byId("downloadScenarioJson"),
+  downloadScenarioCsv: byId("downloadScenarioCsv"),
   uploadOnce: byId("uploadOnce"),
   uploadDuplicate: byId("uploadDuplicate"),
   solvePow: byId("solvePow"),
@@ -35,6 +38,8 @@ const els = {
   detectionMeta: byId("detectionMeta"),
   activityMeta: byId("activityMeta"),
   scenarioLog: byId("scenarioLog"),
+  suiteLog: byId("suiteLog"),
+  suiteReportLog: byId("suiteReportLog"),
   uploadLog: byId("uploadLog"),
   powLog: byId("powLog"),
   policyLog: byId("policyLog"),
@@ -49,6 +54,7 @@ const state = {
   lastChallenges: [],
   lastProofs: null,
   lastChunk: null,
+  lastSuiteReport: null,
 };
 
 function setChip(el, text, level) {
@@ -122,6 +128,42 @@ async function fetchJson(path, options = {}) {
       body: { error: "Network error", detail: String(err) },
     };
   }
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function ensure(condition, message) {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+function metricDelta(before, after) {
+  const keys = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
+  const delta = {};
+  for (const key of keys) {
+    delta[key] = Number(after?.[key] || 0) - Number(before?.[key] || 0);
+  }
+  return delta;
+}
+
+async function metricsSnapshot() {
+  const res = await fetchJson("/metrics");
+  return res.ok ? (res.body.metrics || {}) : {};
+}
+
+function downloadTextFile(filename, content, contentType) {
+  const blob = new Blob([content], { type: contentType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function effectiveDemoFile() {
@@ -303,6 +345,438 @@ async function uploadFile(mode = "none") {
   return result;
 }
 
+function createTextFile(name, text) {
+  return {
+    payload: new Blob([text], { type: "text/plain" }),
+    name,
+  };
+}
+
+async function uploadForClient(clientIdValue, fileObj, { powProofs = null, fileId = null } = {}) {
+  const form = new FormData();
+  form.append("file", fileObj.payload, fileObj.name);
+  if (powProofs) {
+    form.append("pow_proofs_json", JSON.stringify(powProofs));
+  }
+  if (fileId) {
+    form.append("file_id", fileId);
+  }
+
+  return fetchJson("/upload", {
+    method: "POST",
+    headers: {
+      "X-API-Key": apiKey(),
+      "X-Client-ID": clientIdValue,
+    },
+    body: form,
+  });
+}
+
+async function clearPolicyForClient(clientIdValue) {
+  return fetchJson("/demo/clear-policy", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-Key": apiKey(),
+    },
+    body: JSON.stringify({ client_id: clientIdValue }),
+  });
+}
+
+async function forcePolicyForClient(clientIdValue, action) {
+  return fetchJson("/demo/force-policy", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-Key": apiKey(),
+    },
+    body: JSON.stringify({ client_id: clientIdValue, action }),
+  });
+}
+
+async function uploadWithPolicyRecovery(clientIdValue, fileObj, options = {}) {
+  let result = await uploadForClient(clientIdValue, fileObj, options);
+  if (result.status === 429) {
+    await clearPolicyForClient(clientIdValue);
+    result = await uploadForClient(clientIdValue, fileObj, options);
+  }
+  return result;
+}
+
+function suiteLog(message) {
+  const stamp = new Date().toLocaleTimeString();
+  els.suiteLog.textContent = `[${stamp}] ${message}\n` + els.suiteLog.textContent;
+}
+
+function csvEscape(value) {
+  const raw = String(value ?? "");
+  return `"${raw.replace(/"/g, '""')}"`;
+}
+
+function buildSuiteCsv(report) {
+  const metricKeys = Array.from(
+    new Set((report.results || []).flatMap((item) => Object.keys(item.metrics_delta || {}))),
+  ).sort();
+  const header = ["scenario", "status", "duration_ms", "detail", ...metricKeys.map((key) => `delta_${key}`)];
+  const rows = [header.map(csvEscape).join(",")];
+
+  for (const item of report.results || []) {
+    const row = [item.name, item.status, item.duration_ms, item.detail || ""];
+    for (const key of metricKeys) {
+      row.push((item.metrics_delta || {})[key] ?? 0);
+    }
+    rows.push(row.map(csvEscape).join(","));
+  }
+  return rows.join("\n") + "\n";
+}
+
+async function runScenarioCase(suite, name, fn) {
+  const before = await metricsSnapshot();
+  const started = performance.now();
+  let status = "PASS";
+  let detail = "";
+  let data = null;
+
+  try {
+    data = await fn();
+  } catch (err) {
+    status = "FAIL";
+    detail = String(err?.message || err);
+  }
+
+  const after = await metricsSnapshot();
+  const durationMs = Math.round(performance.now() - started);
+  const result = {
+    name,
+    status,
+    duration_ms: durationMs,
+    detail,
+    data,
+    metrics_before: before,
+    metrics_after: after,
+    metrics_delta: metricDelta(before, after),
+  };
+  suite.results.push(result);
+  suiteLog(`${status} ${name} (${durationMs} ms)${detail ? ` - ${detail}` : ""}`);
+  return result;
+}
+
+async function runScenarioSuite() {
+  els.suiteLog.textContent = "Running scenario suite...\n";
+  els.suiteReportLog.textContent = "Generating report...\n";
+
+  const ts = Date.now();
+  const mainClient = `${clientId() || "demo"}-suite-main-${ts}`;
+  const secondClient = `${clientId() || "demo"}-suite-second-${ts}`;
+  const thirdClient = `${clientId() || "demo"}-suite-third-${ts}`;
+  const baseFile = effectiveDemoFile();
+
+  const ctx = {
+    mainClient,
+    secondClient,
+    thirdClient,
+    baseFile,
+    mainChunkHash: null,
+    mainChallenges: [],
+    secondaryFileId: null,
+  };
+
+  const suite = {
+    generated_at: nowIso(),
+    api_key_present: Boolean(apiKey()),
+    clients: {
+      main: mainClient,
+      second: secondClient,
+      third: thirdClient,
+    },
+    results: [],
+  };
+
+  await runScenarioCase(suite, "Scenario 1 - Baseline Upload", async () => {
+    const res = await uploadWithPolicyRecovery(ctx.mainClient, ctx.baseFile);
+    ensure(res.ok, `Baseline upload failed (${res.status})`);
+    const recipe = res.body.file_recipe || [];
+    ensure(recipe.length > 0, "Baseline upload returned empty file_recipe");
+    ctx.mainChunkHash = recipe[0];
+    return {
+      file_id: res.body.file?.file_id || null,
+      total_chunks: res.body.total_chunks || 0,
+      chunk_hash: ctx.mainChunkHash,
+    };
+  });
+
+  await runScenarioCase(suite, "Scenario 2 - Duplicate Requires PoW", async () => {
+    let res = await uploadForClient(ctx.mainClient, ctx.baseFile);
+    if (res.status === 429) {
+      await clearPolicyForClient(ctx.mainClient);
+      res = await uploadForClient(ctx.mainClient, ctx.baseFile);
+    }
+    ensure(res.status === 409, `Expected 409 duplicate challenge, got ${res.status}`);
+    const challenges = res.body?.detail?.required_challenges || [];
+    ensure(challenges.length > 0, "No required_challenges returned");
+    ctx.mainChallenges = challenges;
+    return { challenge_count: challenges.length };
+  });
+
+  await runScenarioCase(suite, "Scenario 3 - PoW Solve And Retry", async () => {
+    ensure(ctx.mainChallenges.length > 0, "Missing PoW challenges from previous scenario");
+    const challengePayload = ctx.mainChallenges.map((c) => ({
+      chunk_hash: c.chunk_hash,
+      challenge_id: c.challenge_id,
+      nonce_hex: c.nonce_hex,
+      offset: c.offset,
+      length: c.length,
+    }));
+    const solve = await fetchJson("/demo/solve_pow", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": apiKey(),
+      },
+      body: JSON.stringify({ challenges: challengePayload }),
+    });
+    ensure(solve.ok, `PoW solve endpoint failed (${solve.status})`);
+    const proofs = solve.body.pow_proofs || {};
+    ensure(Object.keys(proofs).length > 0, "PoW solve returned empty proofs");
+    const retry = await uploadWithPolicyRecovery(ctx.mainClient, ctx.baseFile, { powProofs: proofs });
+    ensure(retry.ok, `Retry upload failed (${retry.status})`);
+    return { proof_count: Object.keys(proofs).length, retry_total_chunks: retry.body.total_chunks || 0 };
+  });
+
+  await runScenarioCase(suite, "Scenario 4 - Policy Enforcement And Recovery", async () => {
+    const rlForce = await forcePolicyForClient(ctx.mainClient, "RATE_LIMIT");
+    ensure(rlForce.ok, `Force RATE_LIMIT failed (${rlForce.status})`);
+    const rlAttempt = await uploadForClient(
+      ctx.mainClient,
+      createTextFile(`rate_limit_${ts}.txt`, `rate-limit-${nowIso()}`),
+    );
+    ensure(rlAttempt.status === 429, `Expected 429 after RATE_LIMIT, got ${rlAttempt.status}`);
+
+    await clearPolicyForClient(ctx.mainClient);
+    const rlRecover = await uploadWithPolicyRecovery(
+      ctx.mainClient,
+      createTextFile(`rate_limit_recover_${ts}.txt`, `rate-limit-recover-${nowIso()}`),
+    );
+    ensure(rlRecover.ok, `Recovery after RATE_LIMIT failed (${rlRecover.status})`);
+
+    const blockForce = await forcePolicyForClient(ctx.mainClient, "BLOCK");
+    ensure(blockForce.ok, `Force BLOCK failed (${blockForce.status})`);
+    const blockAttempt = await uploadForClient(
+      ctx.mainClient,
+      createTextFile(`block_${ts}.txt`, `block-${nowIso()}`),
+    );
+    ensure(blockAttempt.status === 403, `Expected 403 after BLOCK, got ${blockAttempt.status}`);
+
+    await clearPolicyForClient(ctx.mainClient);
+    const blockRecover = await uploadWithPolicyRecovery(
+      ctx.mainClient,
+      createTextFile(`block_recover_${ts}.txt`, `block-recover-${nowIso()}`),
+    );
+    ensure(blockRecover.ok, `Recovery after BLOCK failed (${blockRecover.status})`);
+    return { rate_limit_blocked: true, block_blocked: true };
+  });
+
+  await runScenarioCase(suite, "Scenario 5 - File Version Update And Delete", async () => {
+    const first = await uploadWithPolicyRecovery(
+      ctx.secondClient,
+      createTextFile(`version_v1_${ts}.txt`, `version-v1-${nowIso()}`),
+    );
+    ensure(first.ok, `First version upload failed (${first.status})`);
+    const fileId = first.body?.file?.file_id;
+    ensure(fileId, "No file_id returned for versioning scenario");
+    ctx.secondaryFileId = fileId;
+
+    const second = await uploadWithPolicyRecovery(
+      ctx.secondClient,
+      createTextFile(`version_v2_${ts}.txt`, `version-v2-${nowIso()}`),
+      { fileId },
+    );
+    ensure(second.ok, `Second version upload failed (${second.status})`);
+    ensure(second.body?.file?.version === 2, "Expected version=2 after update");
+
+    const fetched = await fetchJson(`/files/${encodeURIComponent(fileId)}`, {
+      headers: {
+        "X-API-Key": apiKey(),
+        "X-Client-ID": ctx.secondClient,
+      },
+    });
+    ensure(fetched.ok, `Fetch file by id failed (${fetched.status})`);
+
+    const deleted = await fetchJson(`/files/${encodeURIComponent(fileId)}`, {
+      method: "DELETE",
+      headers: {
+        "X-API-Key": apiKey(),
+        "X-Client-ID": ctx.secondClient,
+      },
+    });
+    ensure(deleted.ok, `Delete file failed (${deleted.status})`);
+    return { file_id: fileId, version_after_update: second.body.file.version };
+  });
+
+  await runScenarioCase(suite, "Scenario 6 - Ownership Transfer And Audit", async () => {
+    ensure(ctx.mainChunkHash, "Main chunk hash not available");
+    const before = await fetchJson(`/ownership/${encodeURIComponent(ctx.mainChunkHash)}`, {
+      headers: {
+        "X-API-Key": apiKey(),
+        "X-Client-ID": ctx.mainClient,
+      },
+    });
+    ensure(before.ok, `Ownership fetch failed (${before.status})`);
+
+    const transfer = await fetchJson("/ownership/transfer", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": apiKey(),
+        "X-Client-ID": ctx.mainClient,
+      },
+      body: JSON.stringify({
+        chunk_hash: ctx.mainChunkHash,
+        to_client_id: ctx.thirdClient,
+      }),
+    });
+    ensure(transfer.ok, `Ownership transfer failed (${transfer.status})`);
+
+    const challenge = await fetchJson("/audit/challenge", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": apiKey(),
+        "X-Client-ID": ctx.thirdClient,
+      },
+      body: JSON.stringify({
+        chunk_hash: ctx.mainChunkHash,
+        length: 16,
+      }),
+    });
+    ensure(challenge.ok, `Audit challenge failed (${challenge.status})`);
+    const ch = challenge.body.challenge || {};
+
+    const solveAudit = await fetchJson("/demo/solve_audit", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": apiKey(),
+      },
+      body: JSON.stringify({
+        challenge: {
+          chunk_hash: ch.chunk_hash,
+          challenge_id: ch.challenge_id,
+          nonce_hex: ch.nonce_hex,
+          offset: ch.offset,
+          length: ch.length,
+        },
+      }),
+    });
+    ensure(solveAudit.ok, `Solve audit proof failed (${solveAudit.status})`);
+
+    const verify = await fetchJson("/audit/verify", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": apiKey(),
+      },
+      body: JSON.stringify({
+        challenge_id: ch.challenge_id,
+        proof: solveAudit.body.proof,
+      }),
+    });
+    ensure(verify.ok && verify.body?.verified === true, `Audit verify failed (${verify.status})`);
+
+    const quick = await fetchJson(`/audit/quick/${encodeURIComponent(ctx.mainChunkHash)}`, {
+      headers: {
+        "X-API-Key": apiKey(),
+        "X-Client-ID": ctx.thirdClient,
+      },
+    });
+    ensure(quick.ok, `Quick audit failed (${quick.status})`);
+    return { audit_verified: true, owner_count_after_transfer: transfer.body?.ownership?.owner_count || 0 };
+  });
+
+  await runScenarioCase(suite, "Scenario 7 - Encryption Status And UI Hooks", async () => {
+    const enc = await fetchJson("/demo/encryption", {
+      headers: {
+        "X-API-Key": apiKey(),
+        "X-Client-ID": ctx.mainClient,
+      },
+    });
+    ensure(enc.ok, `Encryption status endpoint failed (${enc.status})`);
+    ensure(typeof enc.body?.encryption_enabled === "boolean", "Missing encryption_enabled in response");
+    return { encryption_enabled: enc.body.encryption_enabled, demo_mode: true };
+  });
+
+  await runScenarioCase(suite, "Scenario 8 - Status And Metrics Summary", async () => {
+    const status = await fetchJson("/demo/status?limit=30");
+    const metrics = await fetchJson("/metrics");
+    ensure(status.ok, `Status endpoint failed (${status.status})`);
+    ensure(metrics.ok, `Metrics endpoint failed (${metrics.status})`);
+    return {
+      active_clients: status.body?.summary?.active_clients || 0,
+      total_buffered_events: status.body?.summary?.total_buffered_events || 0,
+      metrics_keys: Object.keys(metrics.body?.metrics || {}).sort(),
+    };
+  });
+
+  const passed = suite.results.filter((r) => r.status === "PASS").length;
+  suite.summary = {
+    total: suite.results.length,
+    passed,
+    failed: suite.results.length - passed,
+  };
+
+  state.lastSuiteReport = suite;
+  els.suiteReportLog.textContent = pretty(suite);
+  suiteLog(`Scenario suite complete: ${suite.summary.passed}/${suite.summary.total} passed.`);
+  logEvent("Scenario suite report", suite);
+  await refreshOverview();
+  await refreshMetrics();
+}
+
+function suiteTimestampForFile(report) {
+  const iso = (report && report.generated_at) || nowIso();
+  return iso.replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "_");
+}
+
+function downloadScenarioReportJson() {
+  if (!state.lastSuiteReport) {
+    suiteLog("No report available. Run the scenario suite first.");
+    return;
+  }
+  const stamp = suiteTimestampForFile(state.lastSuiteReport);
+  downloadTextFile(
+    `scenario_suite_report_${stamp}.json`,
+    `${JSON.stringify(state.lastSuiteReport, null, 2)}\n`,
+    "application/json",
+  );
+}
+
+function downloadScenarioMetricsCsv() {
+  if (!state.lastSuiteReport) {
+    suiteLog("No report available. Run the scenario suite first.");
+    return;
+  }
+  const stamp = suiteTimestampForFile(state.lastSuiteReport);
+  downloadTextFile(
+    `scenario_suite_metrics_${stamp}.csv`,
+    buildSuiteCsv(state.lastSuiteReport),
+    "text/csv",
+  );
+}
+
+async function handleRunScenarioSuite() {
+  if (!apiKey()) {
+    suiteLog("API key is required to run the scenario suite.");
+    return;
+  }
+
+  els.runScenarioSuite.disabled = true;
+  try {
+    await runScenarioSuite();
+  } finally {
+    els.runScenarioSuite.disabled = false;
+  }
+}
+
 async function solvePowChallenges() {
   if (!state.lastChallenges.length) {
     appendScenario("No pending PoW challenges to solve.");
@@ -476,6 +950,9 @@ els.runBaselineStep.addEventListener("click", runBaselineStep);
 els.runDuplicateStep.addEventListener("click", runDuplicateStep);
 els.runSolveRetryStep.addEventListener("click", runSolveRetryStep);
 els.runAttackStep.addEventListener("click", runAttackStep);
+els.runScenarioSuite.addEventListener("click", handleRunScenarioSuite);
+els.downloadScenarioJson.addEventListener("click", downloadScenarioReportJson);
+els.downloadScenarioCsv.addEventListener("click", downloadScenarioMetricsCsv);
 els.uploadOnce.addEventListener("click", () => uploadFile("none"));
 els.uploadDuplicate.addEventListener("click", () => uploadFile("none"));
 els.solvePow.addEventListener("click", solvePowChallenges);

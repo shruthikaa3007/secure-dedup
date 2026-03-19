@@ -548,6 +548,26 @@ Generate an isolated smoke-test report (Markdown + JSON):
 
 Reports are written to `test_reports/`.
 
+### Full scenario automation + metrics
+
+Run the complete scenario suite (duplicate PoW, policy enforcement/recovery, versioning, ownership transfer, audit, encryption status, metrics snapshot):
+
+```bash
+.venv/bin/python tests/run_scenario_suite.py
+```
+
+Generated artifacts:
+- `test_reports/scenario_suite_report_<timestamp>.md`
+- `test_reports/scenario_suite_report_<timestamp>.json`
+- `test_reports/scenario_suite_metrics_<timestamp>.csv`
+
+### Colab notebook for test/demo automation
+
+Notebook path:
+- `notebooks/scenario_suite_colab.ipynb`
+
+This notebook runs the scenario suite and loads the latest JSON/CSV report for quick inspection and plotting.
+
 
 ## Base-paper alignment upgrades
 

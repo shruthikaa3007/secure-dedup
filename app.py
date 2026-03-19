@@ -99,6 +99,10 @@ class DemoSolvePowRequest(BaseModel):
     challenges: List[DemoChallenge]
 
 
+class DemoSolveAuditRequest(BaseModel):
+    challenge: DemoChallenge
+
+
 class DemoForcePolicyRequest(BaseModel):
     client_id: str = Field(min_length=1)
     action: str = Field(min_length=1)
@@ -408,6 +412,36 @@ def demo_solve_pow(
         }
 
     return {"pow_proofs": proofs}
+
+
+@app.post("/demo/solve_audit")
+def demo_solve_audit(
+    request: DemoSolveAuditRequest,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    _require_demo_mode()
+    validate_api_key(x_api_key)
+
+    challenge = request.challenge
+    try:
+        stored_chunk = get_chunk(challenge.chunk_hash)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "Chunk not found", "chunk_hash": challenge.chunk_hash},
+        )
+
+    try:
+        nonce = bytes.fromhex(challenge.nonce_hex)
+    except Exception:
+        raise HTTPException(status_code=400, detail={"error": "Invalid nonce_hex"})
+
+    proof = compute_proof(stored_chunk, nonce, challenge.offset, challenge.length)
+    return {
+        "challenge_id": challenge.challenge_id,
+        "chunk_hash": challenge.chunk_hash,
+        "proof": proof,
+    }
 
 
 @app.get("/demo/chunk/{chunk_hash}")
