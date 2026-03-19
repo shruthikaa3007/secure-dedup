@@ -6,10 +6,16 @@ __pycache__/
 *.pyd
 *.db
 *.csv
+*.tar
+*.tar.gz
+*.tgz
 *.rar
 *.docx
 *.rtf
 *.drawio
+test_reports/
+notebooks/
+tests/
 uploads/
 local_chunks/
 .venv/
