@@ -1,0 +1,100 @@
+{
+  "generated_at_utc": "2026-03-19T18:24:07.930893+00:00",
+  "config": {
+    "chunks": 300,
+    "unique_chunks": 90,
+    "chunk_size": 4096,
+    "rounds": 5
+  },
+  "paper_context": [
+    {
+      "paper": "Lee and Seo, 2023, Applied Sciences",
+      "direction": "content-derived / convergent-style secure deduplication with dynamic ownership",
+      "link": "https://www.mdpi.com/2076-3417/13/24/13270",
+      "relevance": "Motivates moving beyond public content-only identifiers because deterministic content-derived keys remain vulnerable to dictionary and precomputation attacks."
+    },
+    {
+      "paper": "Wu et al., 2024, Journal of Information Security and Applications",
+      "direction": "randomized encryption deduplication against frequency attack (REFA)",
+      "link": "https://www.sciencedirect.com/science/article/abs/pii/S2214212624000772",
+      "relevance": "Shows that deterministic dedup encryption leaks frequency information and motivates stronger leakage resistance."
+    },
+    {
+      "paper": "Tang et al., 2024, Computer Communications",
+      "direction": "hybrid-cloud secure deduplication with OPRF-assisted convergent key generation",
+      "link": "https://www.sciencedirect.com/science/article/pii/S0140366424001695",
+      "relevance": "Supports secret-assisted key generation and access control for secure deduplication."
+    },
+    {
+      "paper": "Gan et al., 2025, Applied Sciences",
+      "direction": "decentralized server-aided encrypted deduplication with secret sharing (ECDedup)",
+      "link": "https://www.mdpi.com/2076-3417/15/3/1245",
+      "relevance": "Closest recent secret-assisted direction to the proposed scheme; reports improved throughput while strengthening secrecy."
+    }
+  ],
+  "comparison": {
+    "dedup_saved_delta_pct": 0.0,
+    "token_time_delta_pct": 94.046392,
+    "encrypt_time_delta_pct": -0.411229,
+    "decrypt_time_delta_pct": 0.377012,
+    "storage_overhead_delta_bytes": 0.0
+  },
+  "schemes": [
+    {
+      "scheme": "baseline_sha256_bound_aead",
+      "fingerprint": {
+        "mode": "sha256",
+        "key_source": "env",
+        "key_bytes": 32
+      },
+      "encryption": {
+        "enabled": true,
+        "key_bytes": 32,
+        "strict": false,
+        "key_source": "env",
+        "scheme": "fingerprint-bound segmented AES-GCM",
+        "key_derivation": "HKDF-SHA256",
+        "segment_size": 4096
+      },
+      "rounds": 5,
+      "logical_chunks": 300.0,
+      "unique_chunk_tokens": 90.0,
+      "dedup_saved_chunks": 210.0,
+      "dedup_saved_percent": 70.0,
+      "avg_token_time_ms": 0.00388,
+      "avg_encrypt_time_ms": 0.082679,
+      "avg_decrypt_time_ms": 0.090448,
+      "avg_plain_chunk_bytes": 4096.0,
+      "avg_cipher_chunk_bytes": 4134.0,
+      "avg_storage_overhead_bytes": 38.0
+    },
+    {
+      "scheme": "proposed_secret_hmac_bound_aead",
+      "fingerprint": {
+        "mode": "secret_hmac",
+        "key_source": "env",
+        "key_bytes": 32
+      },
+      "encryption": {
+        "enabled": true,
+        "key_bytes": 32,
+        "strict": false,
+        "key_source": "env",
+        "scheme": "fingerprint-bound segmented AES-GCM",
+        "key_derivation": "HKDF-SHA256",
+        "segment_size": 4096
+      },
+      "rounds": 5,
+      "logical_chunks": 300.0,
+      "unique_chunk_tokens": 90.0,
+      "dedup_saved_chunks": 210.0,
+      "dedup_saved_percent": 70.0,
+      "avg_token_time_ms": 0.007529,
+      "avg_encrypt_time_ms": 0.082339,
+      "avg_decrypt_time_ms": 0.090789,
+      "avg_plain_chunk_bytes": 4096.0,
+      "avg_cipher_chunk_bytes": 4134.0,
+      "avg_storage_overhead_bytes": 38.0
+    }
+  ]
+}

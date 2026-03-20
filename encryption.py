@@ -14,6 +14,9 @@ _TAG_LEN = 16
 _SEGMENT_SIZE_DEFAULT = 4096
 _LEN_STRUCT = struct.Struct(">I")
 _DEMO_DEFAULT_KEY_B64 = "c2VjdXJlLWRlZHVwLWRlbW8ta2V5LTMyYnl0ZXMhISE="
+_SCHEME_NAME = "fingerprint-bound segmented AES-GCM"
+_KDF_NAME = "HKDF-SHA256"
+_HKDF_INFO = b"secure-dedup/chunk-key/v1"
 
 
 def _is_truthy(raw: str, default: bool = False) -> bool:
@@ -68,12 +71,24 @@ def _segment_size() -> int:
 def _derive_content_key(master_key: bytes, context: Optional[str]) -> bytes:
     if not context:
         return master_key
-    digest = hmac.new(master_key, context.encode("utf-8"), hashlib.sha256).digest()
-    return digest[: len(master_key)]
+
+    context_bytes = context.encode("utf-8")
+    salt = hashlib.sha256(b"secure-dedup/salt:" + context_bytes).digest()
+    prk = hmac.new(salt, master_key, hashlib.sha256).digest()
+
+    output = bytearray()
+    block = b""
+    info = _HKDF_INFO + b"|" + hashlib.sha256(context_bytes).digest()
+    counter = 1
+    while len(output) < len(master_key):
+        block = hmac.new(prk, block + info + bytes([counter]), hashlib.sha256).digest()
+        output.extend(block)
+        counter += 1
+    return bytes(output[: len(master_key)])
 
 
 def _aad_bytes(context: Optional[str], segment_index: int) -> bytes:
-    prefix = f"chunk_hash:{context or ''}".encode("utf-8")
+    prefix = f"dedup_token:{context or ''}".encode("utf-8")
     return prefix + b"|seg:" + str(segment_index).encode("ascii")
 
 
@@ -183,6 +198,8 @@ def encryption_status() -> dict:
             "key_bytes": len(key) if key else 0,
             "strict": _strict_mode(),
             "key_source": key_source,
+            "scheme": _SCHEME_NAME,
+            "key_derivation": _KDF_NAME,
         }
     except Exception as exc:
         status = {
@@ -190,6 +207,8 @@ def encryption_status() -> dict:
             "key_bytes": 0,
             "strict": _strict_mode(),
             "key_source": "error",
+            "scheme": _SCHEME_NAME,
+            "key_derivation": _KDF_NAME,
             "error": str(exc),
         }
     try:

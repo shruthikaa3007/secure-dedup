@@ -34,6 +34,8 @@ services:
       DEMO_MODE: "true"
       REQUIRE_API_KEY: "false"
       CHUNK_ENCRYPTION_DEFAULT_ON: "true"
+      DEDUP_FINGERPRINT_MODE: secret_hmac
+      DEDUP_FINGERPRINT_DEFAULT_ON: "true"
       STORAGE_BACKEND: localstack
       LOCALSTACK_ENDPOINT: http://localstack:4566
       AWS_ACCESS_KEY_ID: test

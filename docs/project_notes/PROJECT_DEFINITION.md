@@ -2,7 +2,7 @@
 
 ## Final Title
 
-Secure Encrypted Deduplication with Proof-of-Ownership for Duplicate Claims
+Secure Cloud Deduplication with Secret-Assisted Encrypted Storage, Proof-of-Ownership, and Behavioural Monitoring
 
 ## Problem
 
@@ -18,8 +18,8 @@ Peng et al., IEEE TNSM 2025:
 This project is now defined around one primary pipeline:
 
 1. chunk the uploaded file,
-2. hash each chunk for deduplication,
-3. encrypt stored chunk payloads at rest,
+2. derive a secret-assisted dedup token for each chunk,
+3. encrypt stored chunk payloads at rest with token-bound segmented AES-GCM,
 4. detect duplicate claims,
 5. require proof-of-ownership before duplicate reuse,
 6. keep behavioural monitoring visible through request telemetry,
@@ -30,9 +30,9 @@ This project is now defined around one primary pipeline:
 
 The repo should present two concrete improvements clearly:
 
-1. Hash-bound segmented encryption
-   Stored chunks use a segmented AES-GCM envelope derived from a master key and the chunk hash.
-   This ties encryption and integrity to the deduplicated chunk identity.
+1. Secret-assisted fingerprint-bound encryption
+   Stored chunks use a secret HMAC dedup token and a HKDF-derived segmented AES-GCM envelope.
+   This reduces reliance on public content-only chunk identifiers and ties encryption to the deduplicated chunk identity.
 
 2. Step-wise PoW duplicate verification
    Duplicate uploads do not silently succeed.
@@ -59,7 +59,7 @@ The project is complete when the following path works cleanly:
    - PoW challenges issued,
    - PoW proofs verified or rejected,
    - monitored clients and request volume,
-   - encryption enabled status.
+   - encryption enabled status and dedup token mode.
 5. A deployed smoke test can run from Colab and generate a readable report.
 
 ## De-emphasized Items

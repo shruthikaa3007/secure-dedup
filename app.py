@@ -24,7 +24,7 @@ from feature_store import save_features
 from encryption import encryption_enabled
 from file_catalog import create_file, delete_file, get_file, list_files, update_file
 from features import extract_features
-from hashing import hash_chunk
+from hashing import fingerprint_status, hash_chunk
 from logger import REQUEST_LOGS, log_request
 from metrics_tools import runtime_metrics_snapshot, runtime_metrics_summary
 from policy_engine import (
@@ -292,16 +292,16 @@ def demo_config():
         "server_time_utc": datetime.now(timezone.utc).isoformat(),
         "demo_mode": DEMO_MODE,
         "project": {
-            "title": "Secure Encrypted Dedup with PoW Ownership Checks",
+            "title": "Secure Cloud Deduplication with Secret-Assisted Encryption, PoW, and Behavioural Monitoring",
             "base_paper": "Peng et al., IEEE TNSM 2025",
             "focus": [
-                "Upload unique content once and store encrypted chunks.",
+                "Upload unique content once and store secret-token-bound encrypted chunks.",
                 "Require proof-of-ownership before reusing duplicate chunks.",
                 "Keep behavioural monitoring visible through runtime activity and metrics.",
                 "Show dedup savings and PoW outcomes with clear runtime metrics.",
             ],
             "novelty": [
-                "Chunk-hash-bound segmented AES-GCM at rest.",
+                "Secret-assisted HMAC dedup tokens bound to HKDF-derived segmented AES-GCM chunk encryption.",
                 "Step-wise PoW challenge flow for duplicate verification.",
                 "Behavioural monitoring retained as lightweight background telemetry.",
             ],
@@ -309,6 +309,7 @@ def demo_config():
         "auth": {"require_api_key": REQUIRE_API_KEY},
         "storage": storage,
         "encryption": encryption_status(),
+        "fingerprint": fingerprint_status(),
         "detection": {
             "mode": DETECTION_MODE,
             "unsupervised_threshold": UNSUPERVISED_ANOMALY_THRESHOLD,

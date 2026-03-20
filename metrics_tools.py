@@ -6,6 +6,7 @@ from typing import Dict, List
 
 from db_utils import resolve_db_file
 from encryption import encryption_status
+from hashing import fingerprint_status
 
 from logger import REQUEST_LOGS
 
@@ -147,8 +148,8 @@ def runtime_metrics_summary() -> Dict:
 
         summary = {
             "definition": {
-                "project_name": "Secure Encrypted Dedup with PoW Ownership Checks",
-                "focus": "Store encrypted chunks once and verify duplicate claims with proof-of-ownership.",
+                "project_name": "Secure Cloud Deduplication with Secret-Assisted Encryption, Proof-of-Ownership, and Behavioural Monitoring",
+                "focus": "Store encrypted chunks once, bind them to a secret-assisted dedup token, and verify duplicate claims with proof-of-ownership.",
                 "base_paper": "Peng et al., IEEE TNSM 2025",
             },
             "storage": {
@@ -165,7 +166,8 @@ def runtime_metrics_summary() -> Dict:
             },
             "encryption": {
                 **encryption_status(),
-                "mode": "chunk-hash-bound segmented AES-GCM",
+                "mode": "fingerprint-bound segmented AES-GCM",
+                "fingerprint": fingerprint_status(),
             },
             "activity": {
                 "clients_seen": len(REQUEST_LOGS),

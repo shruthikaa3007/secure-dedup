@@ -60,6 +60,10 @@ def main() -> int:
     os.environ["TELEMETRY_DB"] = str(runtime_dir / "telemetry.db")
     os.environ["MODEL_DIR"] = str(repo_root / "advanced_artifacts")
     os.environ["REQUIRE_API_KEY"] = "true"
+    os.environ["DEMO_MODE"] = "true"
+    os.environ["CHUNK_ENCRYPTION_DEFAULT_ON"] = "true"
+    os.environ["DEDUP_FINGERPRINT_MODE"] = "secret_hmac"
+    os.environ["DEDUP_FINGERPRINT_DEFAULT_ON"] = "true"
 
     os.chdir(runtime_dir)
     sys.path.insert(0, str(repo_root))
@@ -97,6 +101,7 @@ def main() -> int:
             "detection_mode": response.get("detection", {}).get("mode"),
             "storage": response.get("storage", {}).get("backend"),
             "encryption_enabled": response.get("encryption", {}).get("enabled"),
+            "fingerprint_mode": response.get("fingerprint", {}).get("mode"),
         }
 
     def case_upload_success() -> Dict[str, Any]:

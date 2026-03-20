@@ -233,11 +233,12 @@ function challengeSummary(challenges) {
   });
 }
 
-function applyMetrics(summary) {
+function applyMetrics(summary, config = {}) {
   const storage = summary?.storage || {};
   const pow = summary?.pow || {};
   const encryption = summary?.encryption || {};
   const activity = summary?.activity || {};
+  const fingerprint = config?.fingerprint || {};
 
   els.activeFilesValue.textContent = String(storage.active_files ?? 0);
   els.uniqueChunksValue.textContent = String(storage.unique_chunks ?? 0);
@@ -248,8 +249,11 @@ function applyMetrics(summary) {
   els.monitoringValue.textContent = String(activity.clients_seen ?? 0);
   els.monitoringMeta.textContent = `${activity.requests_seen ?? 0} requests observed`;
   els.encryptionValue.textContent = encryption.enabled ? "Enabled" : "Disabled";
+  const fingerprintLabel = fingerprint.mode === "secret_hmac"
+    ? "secret-HMAC dedup token"
+    : "public SHA-256 dedup token";
   els.encryptionMeta.textContent = encryption.enabled
-    ? `${encryption.mode || "AES-GCM"} | segment ${encryption.segment_size || "n/a"}`
+    ? `${encryption.mode || "AES-GCM"} | ${fingerprintLabel} | segment ${encryption.segment_size || "n/a"}`
     : "Set CHUNK_ENCRYPTION_KEY to enable encrypted storage";
 }
 
@@ -291,7 +295,7 @@ async function refreshDashboard() {
   }
 
   if (metrics.ok) {
-    applyMetrics(metrics.body.summary || {});
+    applyMetrics(metrics.body.summary || {}, config.body || {});
     els.metricsOutput.textContent = pretty(metrics.body.summary || metrics.body);
   } else {
     els.metricsOutput.textContent = pretty(metrics.body);

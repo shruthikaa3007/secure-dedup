@@ -3,7 +3,7 @@
 Secure deduplication prototype focused on one clear story:
 
 1. Upload a file and store its chunks once.
-2. Encrypt stored chunks with a chunk-hash-bound segmented AES-GCM envelope.
+2. Derive a secret-assisted dedup token and encrypt stored chunks with a fingerprint-bound segmented AES-GCM envelope.
 3. When the same chunk is claimed again, require proof-of-ownership before dedup reuse.
 4. Keep behavioural monitoring available as runtime telemetry rather than an overloaded operator UI.
 
@@ -14,20 +14,23 @@ The project definition lives in [docs/project_notes/PROJECT_DEFINITION.md](/User
 - Core problem: preserve deduplication benefits without allowing fake duplicate claims.
 - Base paper anchor: Peng et al., IEEE TNSM 2025 on secure deduplication, auditing, and ownership management.
 - Final novelty for this repo:
-  - chunk-hash-bound segmented AES-GCM encryption at rest,
+  - secret-assisted HMAC dedup tokens bound to HKDF-derived segmented AES-GCM encryption at rest,
   - proof-of-ownership challenge flow for duplicate uploads,
-  - step-by-step demo UI with clear dedup, PoW, and behavioural monitoring metrics.
+  - behavioural monitoring retained as a lightweight risk/telemetry layer,
+  - step-by-step demo UI with clear dedup, PoW, and encryption metrics.
 
 Secondary research modules remain in the repo, but the primary runtime path and UI now focus on encrypted dedup plus PoW verification.
 
 ## Repository Map
 
 - `app.py`: FastAPI service and upload/PoW endpoints.
-- `encryption.py`: segmented AES-GCM envelope bound to chunk hash context.
+- `hashing.py`: dedup token generation (`SHA-256` baseline or secret-assisted `HMAC-SHA256` mode).
+- `encryption.py`: fingerprint-bound segmented AES-GCM envelope with HKDF-derived per-token keys.
 - `pow.py`, `pow_session.py`, `adaptive_pow.py`: duplicate challenge generation and verification.
 - `storage.py`, `dedup_index.py`, `ownership_store.py`, `file_catalog.py`: chunk storage, dedup references, ownership, and file versions.
 - `ui/`: simplified step-by-step web UI.
 - `tests/run_smoke_tests.py`: local isolated smoke validation.
+- `compare_dedup_encryption_schemes.py`: reproducible baseline vs proposed encryption benchmark.
 - `docker-compose.local.yml`: LocalStack-based local cloud stack (app + Redis + LocalStack S3).
 - `run_demo.sh`: local dev and LocalStack cloud startup commands.
 - `tests/run_deployment_smoke.py`: optional hosted smoke test for remote URLs.
@@ -95,8 +98,25 @@ The dashboard surfaces only the metrics needed for the thesis/demo story:
 - dedup saved chunks
 - PoW challenges issued
 - PoW proofs verified/rejected
-- encryption state
+- encryption state and dedup token mode
 - monitored clients and request volume
+
+## Encryption Scheme Benchmark
+
+Run the local comparison between the baseline public-hash scheme and the proposed secret-assisted scheme:
+
+```bash
+./.venv/bin/python compare_dedup_encryption_schemes.py
+```
+
+This generates:
+
+- `docs/project_notes/encryption_scheme_comparison.json`
+- `docs/project_notes/encryption_scheme_comparison.md`
+
+The thesis-facing positioning notes live in:
+
+- [docs/project_notes/ENCRYPTION_POSITIONING.md](/Users/shruthikaa.s/untitled%20folder/Project/secure-dedup/docs/project_notes/ENCRYPTION_POSITIONING.md)
 
 ## Local Tests
 
