@@ -1,167 +1,317 @@
 # secure-dedup
 
-Secure deduplication prototype focused on one clear story:
+Secure cloud deduplication prototype with four demo-ready ideas:
 
-1. Upload a file and store its chunks once.
-2. Derive a secret-assisted dedup token and encrypt stored chunks with a fingerprint-bound segmented AES-GCM envelope.
-3. When the same chunk is claimed again, require proof-of-ownership before dedup reuse.
-4. Keep behavioural monitoring available as runtime telemetry rather than an overloaded operator UI.
+1. Upload a file once and store only new chunks.
+2. Reuse matching chunks across similar files.
+3. Protect duplicate reuse with proof-of-ownership (PoW).
+4. Show encryption, chunk reuse, and attack throttling clearly in Swagger UI.
 
-The project definition lives in [docs/project_notes/PROJECT_DEFINITION.md](/Users/shruthikaa.s/untitled%20folder/Project/secure-dedup/docs/project_notes/PROJECT_DEFINITION.md).
+## What This Repo Demonstrates
 
-## Final Project Scope
+- Secret-assisted dedup tokens using `HMAC-SHA256` instead of plain public `SHA-256`.
+- Fingerprint-bound segmented `AES-GCM` encryption with `HKDF-SHA256` key derivation.
+- PoW challenges before duplicate chunks can be reused.
+- Runtime policy actions such as `RATE_LIMIT` and `BLOCK`.
+- Demo-facing endpoints for:
+  - encryption comparison,
+  - shared chunk comparison between files,
+  - per-client PoW and rate-limit highlights.
 
-- Core problem: preserve deduplication benefits without allowing fake duplicate claims.
-- Base paper anchor: Peng et al., IEEE TNSM 2025 on secure deduplication, auditing, and ownership management.
-- Final novelty for this repo:
-  - secret-assisted HMAC dedup tokens bound to HKDF-derived segmented AES-GCM encryption at rest,
-  - proof-of-ownership challenge flow for duplicate uploads,
-  - behavioural monitoring retained as a lightweight risk/telemetry layer,
-  - step-by-step demo UI with clear dedup, PoW, and encryption metrics.
+## Main Demo Surface
 
-Secondary research modules remain in the repo, but the primary runtime path and UI now focus on encrypted dedup plus PoW verification.
+The most reliable demo entry point is Swagger UI:
 
-## Repository Map
+```text
+http://127.0.0.1:8000/
+```
 
-- `app.py`: FastAPI service and upload/PoW endpoints.
-- `hashing.py`: dedup token generation (`SHA-256` baseline or secret-assisted `HMAC-SHA256` mode).
-- `encryption.py`: fingerprint-bound segmented AES-GCM envelope with HKDF-derived per-token keys.
-- `pow.py`, `pow_session.py`, `adaptive_pow.py`: duplicate challenge generation and verification.
-- `storage.py`, `dedup_index.py`, `ownership_store.py`, `file_catalog.py`: chunk storage, dedup references, ownership, and file versions.
-- `ui/`: simplified step-by-step web UI.
-- `tests/run_smoke_tests.py`: local isolated smoke validation.
-- `compare_dedup_encryption_schemes.py`: reproducible baseline vs proposed encryption benchmark.
-- `docker-compose.local.yml`: LocalStack-based local cloud stack (app + Redis + LocalStack S3).
-- `run_demo.sh`: local dev and LocalStack cloud startup commands.
-- `tests/run_deployment_smoke.py`: optional hosted smoke test for remote URLs.
-- `notebooks/deployment_smoke_colab.ipynb`: optional hosted smoke notebook.
+The custom frontend still exists under `/ui/`, but the recommended presentation path is now Swagger because it exposes the important responses directly.
 
-## Local Cloud Run (LocalStack / AWS-like)
+## Repo Map
 
-Start the full local cloud demo:
+- `app.py`: FastAPI service and demo endpoints.
+- `hashing.py`: dedup token generation (`sha256` or `secret_hmac`).
+- `encryption.py`: fingerprint-bound segmented AES-GCM envelope.
+- `pow.py`, `pow_session.py`, `adaptive_pow.py`: PoW challenge creation and verification.
+- `storage.py`, `dedup_index.py`: chunk storage and ref counting.
+- `file_catalog.py`, `ownership_store.py`, `audit_store.py`: file versions, ownership, and audit support.
+- `compare_dedup_encryption_schemes.py`: baseline vs proposed encryption benchmark.
+- `tests/run_smoke_tests.py`: end-to-end smoke flow.
+- `tests/test_encryption.py`: encryption unit tests.
+- `notebooks/encryption_demo_colab.ipynb`: Colab notebook for the encryption + PoW demo story.
+
+## 1. Clone The Repo
 
 ```bash
-./run_demo.sh cloud-start
+git clone <your-repo-url>
+cd secure-dedup
+```
+
+## 2. Create And Activate A Virtual Environment
+
+### Windows PowerShell
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+### macOS / Linux
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+## 3. Run The API
+
+### Recommended Local Demo Mode
+
+This mode uses:
+
+- `advanced_artifacts` as the model set,
+- demo-safe thresholds,
+- filesystem storage fallback,
+- encryption enabled,
+- secret-HMAC dedup tokens enabled.
+
+### Windows PowerShell
+
+```powershell
+$env:API_KEYS="dev-api-key"
+$env:REQUIRE_API_KEY="true"
+$env:MODEL_DIR="advanced_artifacts"
+$env:RATE_LIMIT_THRESHOLD="0.70"
+$env:BLOCK_THRESHOLD="0.90"
+$env:DEMO_MODE="true"
+$env:CHUNK_ENCRYPTION_DEFAULT_ON="true"
+$env:DEDUP_FINGERPRINT_MODE="secret_hmac"
+$env:DEDUP_FINGERPRINT_DEFAULT_ON="true"
+$env:STORAGE_BACKEND="filesystem"
+
+.\.venv\Scripts\python.exe -m uvicorn app:app --host 127.0.0.1 --port 8000
+```
+
+### macOS / Linux
+
+```bash
+export API_KEYS=dev-api-key
+export REQUIRE_API_KEY=true
+export MODEL_DIR=advanced_artifacts
+export RATE_LIMIT_THRESHOLD=0.70
+export BLOCK_THRESHOLD=0.90
+export DEMO_MODE=true
+export CHUNK_ENCRYPTION_DEFAULT_ON=true
+export DEDUP_FINGERPRINT_MODE=secret_hmac
+export DEDUP_FINGERPRINT_DEFAULT_ON=true
+export STORAGE_BACKEND=filesystem
+
+./.venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 8000
 ```
 
 Open:
 
 ```text
-http://127.0.0.1:8000/ui/
+http://127.0.0.1:8000/
 ```
 
-This path runs:
+## 4. Optional LocalStack / Redis Run
 
-- the app in Docker
-- Redis
-- LocalStack S3
-- encryption enabled by default
+If you want object-storage-style demo infrastructure locally:
 
-The UI shows the storage backend explicitly, so reviewers can see the app is using LocalStack S3 rather than plain local files.
+```bash
+./run_demo.sh cloud-start
+```
 
-Stop the stack:
+Stop it with:
 
 ```bash
 ./run_demo.sh stop
 ```
 
-Smoke check the running stack:
+## 5. Tests
+
+### Encryption Unit Tests
 
 ```bash
-./run_demo.sh test
+./.venv/bin/python -m pytest tests/test_encryption.py -q
 ```
 
-## Local Dev Run
+On Windows PowerShell:
 
-If you want to run the API from the local venv while still using LocalStack:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-./run_demo.sh start
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests\test_encryption.py -q
 ```
 
-## Guided Demo Flow
-
-The UI is intentionally small now. It walks through three steps:
-
-1. `Step 1: Upload Original File`
-2. `Step 2: Upload Duplicate and Request PoW`
-3. `Step 3: Solve Challenge and Retry`
-
-The dashboard surfaces only the metrics needed for the thesis/demo story:
-
-- storage backend
-- active files
-- unique chunks
-- dedup saved chunks
-- PoW challenges issued
-- PoW proofs verified/rejected
-- encryption state and dedup token mode
-- monitored clients and request volume
-
-## Encryption Scheme Benchmark
-
-Run the local comparison between the baseline public-hash scheme and the proposed secret-assisted scheme:
-
-```bash
-./.venv/bin/python compare_dedup_encryption_schemes.py
-```
-
-This generates:
-
-- `docs/project_notes/encryption_scheme_comparison.json`
-- `docs/project_notes/encryption_scheme_comparison.md`
-
-The thesis-facing positioning notes live in:
-
-- [docs/project_notes/ENCRYPTION_POSITIONING.md](/Users/shruthikaa.s/untitled%20folder/Project/secure-dedup/docs/project_notes/ENCRYPTION_POSITIONING.md)
-
-## Local Tests
-
-Run the isolated smoke suite:
+### Smoke Test
 
 ```bash
 ./.venv/bin/python tests/run_smoke_tests.py
 ```
 
-Run the broader local scenario suite:
+On Windows PowerShell:
 
-```bash
-./.venv/bin/python tests/run_scenario_suite.py
+```powershell
+.\.venv\Scripts\python.exe tests\run_smoke_tests.py
 ```
 
-## Optional Hosted Smoke Test
+## 6. Encryption Comparison
 
-Set deployment values:
-
-```bash
-export SECURE_DEDUP_BASE_URL="https://your-deployment.example.com"
-export SECURE_DEDUP_API_KEY="dev-api-key"
-export SECURE_DEDUP_CLIENT_ID="deployment-smoke-client"
-```
-
-Run:
+Run the checked-in benchmark locally:
 
 ```bash
-python tests/run_deployment_smoke.py
+./.venv/bin/python compare_dedup_encryption_schemes.py
 ```
 
-This test verifies:
+On Windows PowerShell:
 
-1. `/health`
-2. `/demo/config`
-3. first upload success
-4. duplicate upload returns PoW challenge
-5. valid proof retry succeeds
-6. `/metrics` and `/demo/metrics/summary` show clear dedup/PoW numbers
+```powershell
+.\.venv\Scripts\python.exe compare_dedup_encryption_schemes.py
+```
 
-## Colab Notebook
+Generated outputs:
 
-Use [notebooks/deployment_smoke_colab.ipynb](/Users/shruthikaa.s/untitled%20folder/Project/secure-dedup/notebooks/deployment_smoke_colab.ipynb) only if you still want a hosted smoke run. It is no longer the primary demo path.
+- `docs/project_notes/encryption_scheme_comparison.json`
+- `docs/project_notes/encryption_scheme_comparison.md`
 
-## Cleanup Notes
+Live API view:
+
+```text
+GET /demo/encryption/comparison
+```
+
+This is the fastest way to show:
+
+- baseline public-hash-bound encryption,
+- proposed secret-HMAC-bound encryption,
+- dedup saved percent,
+- token time delta,
+- encrypt/decrypt time deltas,
+- storage overhead delta.
+
+## 7. Demo Flow In Swagger
+
+Use header values:
+
+- `X-API-Key: dev-api-key`
+- `X-Client-ID: demo-client-1`
+
+### A. Show The Encryption Story
+
+1. Open `GET /demo/encryption/comparison`
+2. Click `Execute`
+3. Show:
+   - `baseline_scheme`
+   - `proposed_scheme`
+   - `dedup_saved_percent_baseline`
+   - `dedup_saved_percent_proposed`
+   - `token_time_delta_pct`
+   - `storage_overhead_delta_bytes`
+
+### B. Show Chunk Reuse Across Similar Files
+
+Use two controlled files with large shared regions. This is important: naturally edited tiny files do not always share visible chunks depending on chunk boundaries.
+
+Best options:
+
+- use the Colab notebook in `notebooks/encryption_demo_colab.ipynb`, or
+- create two files where the start and end blocks are identical and the middle block differs.
+
+Demo sequence:
+
+1. `POST /upload` with file A
+2. `POST /upload` with file B
+3. If the response is `409`, show:
+   - `detail.chunk_summary`
+   - `detail.chunk_details`
+   - `detail.required_challenges`
+4. `POST /demo/solve_pow`
+5. Retry `POST /upload` with `pow_proofs_json`
+6. `GET /demo/compare-files`
+
+What to point out:
+
+- `shared_chunk_count`
+- `shared_chunk_positions`
+- `chunk_summary.shared_with_existing_count`
+- `chunk_summary.reused_existing_count`
+- `chunk_summary.pow_required_count`
+- `chunk_summary.pow_verified_count`
+
+### C. Show Duplicate Protection
+
+1. Upload the same file again with the same client
+2. Show the `409` response
+
+Call out:
+
+- `detail.error = "PoW verification required for duplicate chunks"`
+- `detail.required_challenges`
+- `detail.chunk_summary.shared_with_existing_count`
+
+### D. Show Rate Limiting During Attack Scenarios
+
+1. `POST /demo/force-policy` with:
+
+```json
+{
+  "client_id": "demo-client-1",
+  "action": "RATE_LIMIT"
+}
+```
+
+2. Attempt another `POST /upload`
+3. Show the `429` response
+4. Open `GET /demo/highlights/{client_id}`
+
+What to point out:
+
+- `detail.policy.action`
+- `detail.policy.remaining_sec`
+- `highlights.rate_limit_events`
+- `highlights.pow_challenges_issued`
+- `highlights.duplicate_reuse_successes`
+- `recent_events`
+
+## 8. Colab Demo Option
+
+If you want a notebook-driven presentation instead of manual Swagger clicking, use:
+
+- `notebooks/encryption_demo_colab.ipynb`
+
+It demonstrates:
+
+- encryption comparison,
+- controlled similar-file chunk overlap,
+- PoW solve-and-retry,
+- rate-limit evidence.
+
+## 9. Notes For Similar Files
+
+If two files are only "slightly similar" in a casual sense, they may still fail to show chunk overlap clearly.
+
+That is not necessarily a bug.
+
+Why:
+
+- chunking depends on content boundaries,
+- small edits can shift chunk boundaries,
+- short files may collapse into very few chunks.
+
+For a reliable presentation, use files with:
+
+- a large identical prefix,
+- a different middle region,
+- a large identical suffix.
+
+That is exactly why the Colab notebook uses controlled payloads.
+
+## 10. Cleanup
 
 Generated runtime output is intentionally ignored:
 
@@ -169,6 +319,5 @@ Generated runtime output is intentionally ignored:
 - `uploads/`
 - `local_chunks/`
 - `request_logs.csv`
-- generated demo comparison files
 
-This keeps the repo centered on the implementation instead of checked-in runtime noise.
+This keeps the repo focused on implementation and demo artifacts instead of runtime noise.

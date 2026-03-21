@@ -17,7 +17,7 @@ from audit_store import create_audit_challenge, quick_audit, verify_audit_challe
 from attack_labeler import label_attack
 from auth import REQUIRE_API_KEY, resolve_client_id, validate_api_key
 from chunking import chunk_file
-from dedup_index import chunk_exists, decrement_chunk_ref, register_chunk
+from dedup_index import chunk_exists, decrement_chunk_ref, get_ref_count, register_chunk
 from detector import DETECTION_MODE, UNSUPERVISED_ANOMALY_THRESHOLD, detect_anomaly
 from encryption import encryption_status, is_encrypted_payload
 from feature_store import save_features
@@ -54,6 +54,7 @@ app = FastAPI()
 DEMO_MODE = os.getenv("DEMO_MODE", "true").strip().lower() in {"1", "true", "yes", "on"}
 BASE_DIR = Path(__file__).resolve().parent
 UI_DIR = BASE_DIR / "ui"
+ENCRYPTION_COMPARISON_JSON = BASE_DIR / "docs" / "project_notes" / "encryption_scheme_comparison.json"
 
 if UI_DIR.exists():
     app.mount("/ui", StaticFiles(directory=str(UI_DIR), html=True), name="ui")
@@ -185,6 +186,14 @@ def _challenge_response_payload(challenge: Dict) -> Dict:
 
 
 def _raise_policy_exception(client_id: str, policy: Dict, detection: Optional[Dict] = None) -> None:
+    action = str(policy.get("action", "ALLOW")).upper()
+    if action in {"RATE_LIMIT", "BLOCK"}:
+        log_request(
+            client_id=client_id,
+            operation_type="policy_rate_limit" if action == "RATE_LIMIT" else "policy_block",
+            chunk_hash=None,
+            pow_result=policy.get("risk_score", "enforced"),
+        )
     detail = {
         "error": "Request blocked by anomaly policy" if policy["action"] == "BLOCK" else "Rate limited by anomaly policy",
         "client_id": client_id,
@@ -268,6 +277,158 @@ def _parse_pow_proofs(raw: Optional[str]) -> Dict[str, Dict[str, str]]:
     return parsed
 
 
+def _request_log_snapshot():
+    return [(client_id, list(history)) for client_id, history in list(REQUEST_LOGS.items())]
+
+
+def _recipe_positions(recipe: List[str]) -> Dict[str, List[int]]:
+    positions: Dict[str, List[int]] = {}
+    for index, chunk_hash in enumerate(recipe):
+        positions.setdefault(chunk_hash, []).append(index)
+    return positions
+
+
+def _chunk_detail_rows(
+    chunk_records,
+    preexisting_ref_counts: Dict[str, int],
+    verified_duplicate_hashes: Optional[set] = None,
+    pending_challenges_by_hash: Optional[Dict[str, Dict]] = None,
+) -> List[Dict]:
+    verified_duplicate_hashes = verified_duplicate_hashes or set()
+    pending_challenges_by_hash = pending_challenges_by_hash or {}
+    rows = []
+
+    for index, (chunk, chunk_hash) in enumerate(chunk_records):
+        existed_before_upload = chunk_hash in preexisting_ref_counts
+        challenge = pending_challenges_by_hash.get(chunk_hash)
+        if challenge:
+            status = "pow_required"
+        elif existed_before_upload:
+            status = "reused_existing"
+        else:
+            status = "stored_new"
+
+        row = {
+            "index": index,
+            "chunk_hash": chunk_hash,
+            "size_bytes": len(chunk),
+            "existed_before_upload": existed_before_upload,
+            "ref_count_before_upload": int(preexisting_ref_counts.get(chunk_hash, 0)),
+            "pow_required": bool(challenge),
+            "pow_verified": chunk_hash in verified_duplicate_hashes,
+            "status": status,
+        }
+        if challenge:
+            row["challenge_id"] = challenge.get("challenge_id")
+            row["difficulty_level"] = challenge.get("adaptive_profile", {}).get("difficulty_level")
+        rows.append(row)
+
+    return rows
+
+
+def _chunk_summary_payload(chunk_records, details: List[Dict]) -> Dict:
+    recipe = [chunk_hash for _, chunk_hash in chunk_records]
+    unique_chunk_hashes = list(dict.fromkeys(recipe))
+    return {
+        "logical_chunk_count": len(recipe),
+        "unique_chunk_count": len(set(recipe)),
+        "shared_with_existing_count": sum(1 for item in details if item.get("existed_before_upload")),
+        "new_chunk_count": sum(1 for item in details if item.get("status") == "stored_new"),
+        "reused_existing_count": sum(1 for item in details if item.get("status") == "reused_existing"),
+        "pow_required_count": sum(1 for item in details if item.get("pow_required")),
+        "pow_verified_count": sum(1 for item in details if item.get("pow_verified")),
+        "shared_chunk_hashes": [item["chunk_hash"] for item in details if item.get("existed_before_upload")],
+        "unique_chunk_hashes": unique_chunk_hashes,
+    }
+
+
+def _compare_file_recipes_payload(file_a: Dict, file_b: Dict) -> Dict:
+    recipe_a = list(file_a.get("recipe", []))
+    recipe_b = list(file_b.get("recipe", []))
+    positions_a = _recipe_positions(recipe_a)
+    positions_b = _recipe_positions(recipe_b)
+    shared_hashes = sorted(set(positions_a) & set(positions_b))
+    shared_recipe_entries = sum(min(len(positions_a[h]), len(positions_b[h])) for h in shared_hashes)
+
+    return {
+        "file_a": {
+            "file_id": file_a.get("file_id"),
+            "file_name": file_a.get("file_name"),
+            "version": file_a.get("version"),
+            "chunk_count": len(recipe_a),
+        },
+        "file_b": {
+            "file_id": file_b.get("file_id"),
+            "file_name": file_b.get("file_name"),
+            "version": file_b.get("version"),
+            "chunk_count": len(recipe_b),
+        },
+        "shared_chunk_count": len(shared_hashes),
+        "shared_recipe_entries": shared_recipe_entries,
+        "overlap_ratio_vs_file_a": round(shared_recipe_entries / len(recipe_a), 4) if recipe_a else 0.0,
+        "overlap_ratio_vs_file_b": round(shared_recipe_entries / len(recipe_b), 4) if recipe_b else 0.0,
+        "shared_chunk_positions": [
+            {
+                "chunk_hash": chunk_hash,
+                "positions_in_file_a": positions_a[chunk_hash],
+                "positions_in_file_b": positions_b[chunk_hash],
+            }
+            for chunk_hash in shared_hashes
+        ],
+        "only_in_file_a": sorted(set(positions_a) - set(positions_b)),
+        "only_in_file_b": sorted(set(positions_b) - set(positions_a)),
+        "interpretation": (
+            "These files share chunk hashes and can visibly demonstrate dedup reuse."
+            if shared_hashes
+            else "These files do not share chunk hashes with the current chunking settings."
+        ),
+    }
+
+
+def _client_highlights_payload(client_id: str) -> Dict:
+    snapshot = list(REQUEST_LOGS.get(client_id, []))
+    op_counts = Counter(
+        item.get("operation_type") for item in snapshot if item.get("operation_type")
+    )
+    recent_events = [
+        {
+            "timestamp": item.get("timestamp"),
+            "operation_type": item.get("operation_type"),
+            "chunk_hash": item.get("chunk_hash"),
+            "pow_result": item.get("pow_result"),
+        }
+        for item in snapshot[-12:]
+    ]
+    features = extract_features(snapshot, REQUEST_LOGS) if snapshot else {}
+    detection = _safe_detect(features, client_id=client_id) if snapshot else {
+        "is_anomaly": False,
+        "risk_score": 0.0,
+        "predicted_attack_label": "normal",
+        "detection_mode": "insufficient_history",
+        "class_probabilities": {},
+    }
+    policy = decide_response(detection)
+    return {
+        "client_id": client_id,
+        "event_counts": dict(op_counts),
+        "highlights": {
+            "upload_attempts": int(op_counts.get("upload_start", 0)),
+            "stored_new_chunks": int(op_counts.get("upload_chunk", 0)),
+            "pow_challenges_issued": int(op_counts.get("pow_challenge", 0)),
+            "pow_verifications": int(op_counts.get("pow_verify", 0)),
+            "duplicate_reuse_successes": int(op_counts.get("pow", 0)),
+            "rate_limit_events": int(op_counts.get("policy_rate_limit", 0)),
+            "block_events": int(op_counts.get("policy_block", 0)),
+        },
+        "active_policy": get_active_policy_action(client_id),
+        "reputation": get_reputation(client_id),
+        "features": features,
+        "detection": detection,
+        "policy_decision": policy,
+        "recent_events": recent_events,
+    }
+
+
 def _require_demo_mode() -> None:
     if not DEMO_MODE:
         raise HTTPException(status_code=404, detail={"error": "Demo mode disabled"})
@@ -279,9 +440,7 @@ def _require_api_key(x_api_key: Optional[str] = Header(default=None, alias="X-AP
 
 @app.get("/", include_in_schema=False)
 def demo_root():
-    if UI_DIR.exists():
-        return RedirectResponse(url="/ui/")
-    return {"status": "ok", "message": "UI assets not found. Use API endpoints instead."}
+    return RedirectResponse(url="/docs")
 
 
 @app.get("/demo/config")
@@ -362,6 +521,18 @@ def demo_policy_snapshot(
         "active_policy": active_policy,
         "reputation": reputation_snapshot,
     }
+
+
+@app.get("/demo/highlights/{client_id}")
+def demo_client_highlights(
+    client_id: str,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    """
+    Demo-facing summary of chunk reuse, PoW activity, and policy/rate-limit events for one client.
+    """
+    validate_api_key(x_api_key)
+    return {"status": "ok", **_client_highlights_payload(client_id)}
 
 
 @app.post("/demo/force-policy")
@@ -479,6 +650,33 @@ def demo_chunk_inspect(
     }
 
 
+@app.get("/demo/compare-files")
+def demo_compare_files(
+    file_id_a: str,
+    file_id_b: str,
+    api_key: str = Depends(_require_api_key),
+    x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
+):
+    """
+    Compare two uploaded file recipes and show exactly which chunk hashes are shared.
+    This is the easiest Swagger-visible proof that slightly similar files reuse the same chunks.
+    """
+    client_id = resolve_client_id(x_client_id, f"{file_id_a}:{file_id_b}", api_key)
+    try:
+        file_a = get_file(file_id_a)
+        file_b = get_file(file_id_b)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"error": str(exc)})
+
+    if file_a["owner_client_id"] != client_id or file_b["owner_client_id"] != client_id:
+        raise HTTPException(status_code=403, detail={"error": "Only the owner can compare file recipes"})
+
+    return {
+        "status": "ok",
+        "comparison": _compare_file_recipes_payload(file_a, file_b),
+    }
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -531,26 +729,65 @@ def demo_encryption(
     return result
 
 
+@app.get("/demo/encryption/comparison")
+def demo_encryption_comparison():
+    """
+    Return the checked-in baseline-vs-proposed encryption comparison used for the demo.
+    """
+    if not ENCRYPTION_COMPARISON_JSON.exists():
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "Encryption comparison report not found",
+                "path": str(ENCRYPTION_COMPARISON_JSON),
+            },
+        )
+
+    with open(ENCRYPTION_COMPARISON_JSON, "r", encoding="utf-8") as fh:
+        comparison = json.load(fh)
+
+    schemes = comparison.get("schemes", [])
+    baseline = schemes[0] if len(schemes) > 0 else {}
+    proposed = schemes[1] if len(schemes) > 1 else {}
+    deltas = comparison.get("comparison", {})
+    return {
+        "status": "ok",
+        "headline": {
+            "baseline_scheme": baseline.get("scheme"),
+            "proposed_scheme": proposed.get("scheme"),
+            "dedup_saved_percent_baseline": baseline.get("dedup_saved_percent"),
+            "dedup_saved_percent_proposed": proposed.get("dedup_saved_percent"),
+            "token_time_delta_pct": deltas.get("token_time_delta_pct"),
+            "encrypt_time_delta_pct": deltas.get("encrypt_time_delta_pct"),
+            "decrypt_time_delta_pct": deltas.get("decrypt_time_delta_pct"),
+            "storage_overhead_delta_bytes": deltas.get("storage_overhead_delta_bytes"),
+        },
+        "comparison": comparison,
+    }
+
+
 @app.get("/demo/status")
 def demo_status(limit: int = 20):
     bounded_limit = max(1, min(100, int(limit)))
 
     clients = []
     events = []
-    for client_id, history in REQUEST_LOGS.items():
+    request_log_items = _request_log_snapshot()
+    for client_id, history in request_log_items:
         if not history:
             continue
-        latest_event = history[-1]
+        history_snapshot = list(history)
+        latest_event = history_snapshot[-1]
         clients.append(
             {
                 "client_id": client_id,
-                "request_count": len(history),
+                "request_count": len(history_snapshot),
                 "last_event_ts": latest_event.get("timestamp"),
                 "active_policy": get_active_policy_action(client_id),
                 "reputation": get_reputation(client_id),
             }
         )
-        for item in list(history)[-bounded_limit:]:
+        for item in history_snapshot[-bounded_limit:]:
             events.append(
                 {
                     "client_id": client_id,
@@ -570,7 +807,7 @@ def demo_status(limit: int = 20):
         "server_time": time.time(),
         "summary": {
             "active_clients": len(clients),
-            "total_buffered_events": sum(len(history) for history in REQUEST_LOGS.values()),
+            "total_buffered_events": sum(len(history) for _, history in request_log_items),
             "recent_operation_types": Counter(
                 event["operation_type"] for event in events if event.get("operation_type")
             ),
@@ -582,7 +819,7 @@ def demo_status(limit: int = 20):
 
 @app.get("/demo/ui")
 def demo_ui():
-    return RedirectResponse(url="/ui/")
+    return RedirectResponse(url="/docs")
 
 
 @app.post("/pow/challenge")
@@ -709,6 +946,11 @@ async def upload_file(
     chunk_records = [(chunk, hash_chunk(chunk)) for chunk in chunks if chunk]
     recipe = [chunk_hash for _, chunk_hash in chunk_records]
     duplicate_hits_by_hash = Counter(recipe)
+    preexisting_ref_counts = {
+        chunk_hash: get_ref_count(chunk_hash)
+        for chunk_hash in set(recipe)
+        if chunk_exists(chunk_hash)
+    }
     adaptive_inputs = _compute_adaptive_inputs(client_id)
 
     supplied_proofs = _parse_pow_proofs(pow_proofs_json)
@@ -717,7 +959,7 @@ async def upload_file(
 
     # Phase 1: ensure duplicate chunks have valid PoW before mutating storage/index.
     for chunk, chunk_hash in chunk_records:
-        if not chunk_exists(chunk_hash):
+        if chunk_hash not in preexisting_ref_counts:
             continue
 
         proof_payload = supplied_proofs.get(chunk_hash)
@@ -760,6 +1002,12 @@ async def upload_file(
         }
 
     if pending_challenges_by_hash:
+        preview_details = _chunk_detail_rows(
+            chunk_records,
+            preexisting_ref_counts=preexisting_ref_counts,
+            verified_duplicate_hashes=verified_duplicate_hashes,
+            pending_challenges_by_hash=pending_challenges_by_hash,
+        )
         for chunk_hash in pending_challenges_by_hash:
             log_request(
                 client_id=client_id,
@@ -773,6 +1021,8 @@ async def upload_file(
                 "error": "PoW verification required for duplicate chunks",
                 "client_id": client_id,
                 "required_challenges": list(pending_challenges_by_hash.values()),
+                "chunk_summary": _chunk_summary_payload(chunk_records, preview_details),
+                "chunk_details": preview_details,
                 "hint": "Call /pow/verify or provide pow_proofs_json and retry /upload",
             },
         )
@@ -869,11 +1119,21 @@ async def upload_file(
         policy_action=policy["action"],
     )
 
+    final_chunk_details = _chunk_detail_rows(
+        chunk_records,
+        preexisting_ref_counts=preexisting_ref_counts,
+        verified_duplicate_hashes=verified_duplicate_hashes,
+    )
+    for item in final_chunk_details:
+        item["ref_count_after_upload"] = int(get_ref_count(item["chunk_hash"]))
+
     return {
         "status": "Upload successful",
         "client_id": client_id,
         "total_chunks": len(recipe),
         "file_recipe": recipe,
+        "chunk_summary": _chunk_summary_payload(chunk_records, final_chunk_details),
+        "chunk_details": final_chunk_details,
         "file": file_record,
         "features": client_features,
         "saved_to": save_path,

@@ -152,6 +152,7 @@ def _supervised_detect(feature_dict: Dict[str, float]):
     class_probabilities = {}
     confidence = None
     normal_probability = None
+    top_anomaly_probability = None
 
     if hasattr(SUPERVISED_MODEL, "predict_proba"):
         proba = SUPERVISED_MODEL.predict_proba(X)[0]
@@ -170,13 +171,23 @@ def _supervised_detect(feature_dict: Dict[str, float]):
             class_probabilities.get(predicted_label, max(class_probabilities.values()))
         )
         normal_probability = class_probabilities.get("normal")
+        anomaly_probabilities = [
+            float(prob) for cls, prob in class_probabilities.items() if cls != "normal"
+        ]
+        if anomaly_probabilities:
+            top_anomaly_probability = max(anomaly_probabilities)
 
     is_anomaly = predicted_label != "normal"
 
-    if normal_probability is not None:
-        risk_score = float(max(0.0, min(1.0, 1.0 - normal_probability)))
+    # In the multiclass supervised path, summing all non-normal probabilities can
+    # overstate risk for benign traffic. For demo/runtime policy decisions, use the
+    # strongest single attack probability when the model still predicts "normal".
+    if top_anomaly_probability is not None and not is_anomaly:
+        risk_score = float(max(0.0, min(1.0, top_anomaly_probability)))
     elif confidence is not None:
-        risk_score = float(confidence if is_anomaly else 1.0 - confidence)
+        risk_score = float(
+            max(0.0, min(1.0, confidence if is_anomaly else 1.0 - confidence))
+        )
     else:
         risk_score = float(1.0 if is_anomaly else 0.0)
 
@@ -187,6 +198,8 @@ def _supervised_detect(feature_dict: Dict[str, float]):
         model_scores["prediction_confidence"] = confidence
     if normal_probability is not None:
         model_scores["normal_probability"] = float(normal_probability)
+    if top_anomaly_probability is not None:
+        model_scores["top_anomaly_probability"] = float(top_anomaly_probability)
 
     return {
         "model_scores": model_scores,

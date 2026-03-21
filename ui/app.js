@@ -149,6 +149,23 @@ async function fetchJson(path, options = {}) {
   }
 }
 
+async function fetchJsonWithTimeout(path, options = {}, timeoutMs = 4000) {
+  if (typeof AbortController === "undefined") {
+    return fetchJson(path, options);
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetchJson(path, {
+      ...options,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function clearCurrentPolicy() {
   if (!clientId()) {
     return { ok: false, status: 0, body: { error: "Missing client id" } };
@@ -258,12 +275,12 @@ function applyMetrics(summary, config = {}) {
 }
 
 async function refreshDashboard() {
-  const [health, config, metrics, status] = await Promise.all([
+  const [health, config, metrics] = await Promise.all([
     fetchJson("/health"),
     fetchJson("/demo/config"),
     fetchJson("/metrics"),
-    fetchJson("/demo/status?limit=10"),
   ]);
+  const status = await fetchJsonWithTimeout("/demo/status?limit=10", {}, 4000);
 
   if (health.ok && health.body.status === "ok") {
     els.healthValue.textContent = "Healthy";
@@ -301,7 +318,15 @@ async function refreshDashboard() {
     els.metricsOutput.textContent = pretty(metrics.body);
   }
 
-  els.statusOutput.textContent = pretty(status.body || status);
+  if (status.ok) {
+    els.statusOutput.textContent = pretty(status.body || status);
+  } else {
+    els.statusOutput.textContent = pretty({
+      message: "Live status feed unavailable",
+      hint: "Use /docs for a reliable demo flow, or retry dashboard refresh.",
+      detail: status.body || status,
+    });
+  }
 }
 
 async function runOriginalUploadStep() {
