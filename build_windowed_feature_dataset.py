@@ -2,6 +2,7 @@ import argparse
 import csv
 import statistics
 from collections import Counter, defaultdict
+from pathlib import Path
 from typing import Dict, List
 
 from attack_labeler import label_attack
@@ -31,7 +32,16 @@ def parse_args() -> argparse.Namespace:
             "credible presentation-ready samples."
         )
     )
-    parser.add_argument("--input", default="request_logs.csv")
+    parser.add_argument(
+        "--input",
+        action="append",
+        dest="inputs",
+        help=(
+            "Input request log CSV in the standardized schema. "
+            "Repeat the flag to merge multiple sources into one larger dataset. "
+            "Default: request_logs.csv"
+        ),
+    )
     parser.add_argument("--feature-output", default="demo_feature_dataset.csv")
     parser.add_argument("--detection-output", default="demo_detection_results.csv")
     parser.add_argument(
@@ -64,6 +74,14 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help="Optional cap on number of clients by event volume (0 = all)",
     )
+    parser.add_argument(
+        "--tag-input-clients",
+        action="store_true",
+        help=(
+            "Prefix client ids with the input filename stem. "
+            "This is enabled automatically when multiple --input files are provided."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -74,32 +92,38 @@ def _safe_float(value, default: float = 0.0) -> float:
         return default
 
 
-def _load_logs(path: str) -> Dict[str, List[Dict]]:
+def _load_logs(paths: List[str], tag_input_clients: bool = False) -> tuple[Dict[str, List[Dict]], int]:
     logs_by_client: Dict[str, List[Dict]] = defaultdict(list)
+    total_events = 0
 
-    with open(path, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            timestamp = _safe_float(row.get("timestamp"), 0.0)
-            client_id = str(row.get("client_id", "unknown"))
-            operation_type = str(row.get("operation_type", ""))
-            chunk_hash = row.get("chunk_hash")
-            chunk_hash = str(chunk_hash) if chunk_hash is not None else ""
-            if chunk_hash.lower() == "nan":
-                chunk_hash = ""
+    for path in paths:
+        source_tag = Path(path).stem.replace(" ", "_")
+        with open(path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                timestamp = _safe_float(row.get("timestamp"), 0.0)
+                client_id = str(row.get("client_id", "unknown"))
+                if tag_input_clients:
+                    client_id = f"{source_tag}:{client_id}"
+                operation_type = str(row.get("operation_type", ""))
+                chunk_hash = row.get("chunk_hash")
+                chunk_hash = str(chunk_hash) if chunk_hash is not None else ""
+                if chunk_hash.lower() == "nan":
+                    chunk_hash = ""
 
-            logs_by_client[client_id].append(
-                {
-                    "timestamp": timestamp,
-                    "operation_type": operation_type,
-                    "chunk_hash": chunk_hash,
-                }
-            )
+                logs_by_client[client_id].append(
+                    {
+                        "timestamp": timestamp,
+                        "operation_type": operation_type,
+                        "chunk_hash": chunk_hash,
+                    }
+                )
+                total_events += 1
 
     for client_id in logs_by_client:
         logs_by_client[client_id].sort(key=lambda x: x["timestamp"])
 
-    return logs_by_client
+    return logs_by_client, total_events
 
 
 def _window_starts(client_logs: List[Dict], step_sec: float) -> List[float]:
@@ -171,6 +195,7 @@ def _write_csv(path: str, header: List[str], rows: List[Dict]) -> None:
 
 def main() -> None:
     args = parse_args()
+    input_paths = args.inputs or ["request_logs.csv"]
     if args.window_sec <= 0:
         raise ValueError("--window-sec must be positive")
     if args.step_sec <= 0:
@@ -180,9 +205,13 @@ def main() -> None:
     if args.max_windows_per_client <= 0:
         raise ValueError("--max-windows-per-client must be positive")
 
-    logs_by_client = _load_logs(args.input)
+    tag_input_clients = args.tag_input_clients or len(input_paths) > 1
+    logs_by_client, raw_event_count = _load_logs(
+        input_paths,
+        tag_input_clients=tag_input_clients,
+    )
     if not logs_by_client:
-        raise ValueError(f"No logs found in {args.input}")
+        raise ValueError(f"No logs found in inputs: {input_paths}")
 
     if args.max_clients > 0:
         ranked_clients = sorted(
@@ -263,6 +292,8 @@ def main() -> None:
     _write_csv(args.detection_output, detection_header, detection_rows)
 
     label_counts = Counter(row["attack_label"] for row in detection_rows)
+    print(f"Input files: {len(input_paths)}")
+    print(f"Raw events loaded: {raw_event_count}")
     print(f"Clients processed: {len(logs_by_client)}")
     print(f"Feature rows: {len(feature_rows)}")
     print(f"Saved feature dataset: {args.feature_output}")

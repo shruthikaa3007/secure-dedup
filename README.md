@@ -48,6 +48,8 @@ The custom frontend still exists under `/ui/`, but the recommended presentation 
 - `compare_dedup_encryption_schemes.py`: baseline vs proposed encryption benchmark.
 - `tests/run_smoke_tests.py`: end-to-end smoke flow.
 - `tests/test_encryption.py`: encryption unit tests.
+- `tests/test_frequency_attack_resistance.py`: REFA-aligned proof that HMAC blocks the public-token vulnerability while preserving dedup.
+- `tests/test_attack_detection_demo.py`: self-contained behavioural attack demos for hash probing, dedup DoS, and ownership fraud.
 - `notebooks/encryption_demo_colab.ipynb`: Colab notebook for the encryption + PoW demo story.
 - `docs/project_notes/BASE_PAPER_ALIGNMENT.md`: direct explanation of how this project improves on Wu et al.
 
@@ -158,6 +160,30 @@ On Windows PowerShell:
 .\.venv\Scripts\python.exe -m pytest tests\test_encryption.py -q
 ```
 
+### Frequency-Attack Resistance Demo Tests
+
+```bash
+./.venv/bin/python -m pytest tests/test_frequency_attack_resistance.py -v -s
+```
+
+On Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests\test_frequency_attack_resistance.py -v -s
+```
+
+### Behavioural Attack Demo Tests
+
+```bash
+./.venv/bin/python -m pytest tests/test_attack_detection_demo.py -v -s
+```
+
+On Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests\test_attack_detection_demo.py -v -s
+```
+
 ### Smoke Test
 
 ```bash
@@ -182,6 +208,12 @@ On Windows PowerShell:
 
 ```powershell
 .\.venv\Scripts\python.exe compare_dedup_encryption_schemes.py
+```
+
+For a presentation-friendly terminal table:
+
+```powershell
+.\.venv\Scripts\python.exe compare_dedup_encryption_schemes.py --print-table
 ```
 
 Generated outputs:
@@ -301,7 +333,40 @@ It demonstrates:
 - PoW solve-and-retry,
 - rate-limit evidence.
 
-## 9. Scope Note
+## 9. Larger Dataset Option
+
+If an examiner pushes on dataset size, do not anchor your answer on the small legacy `training_data.csv` snapshot alone. The stronger story is the trace-to-window pipeline:
+
+```bash
+./.venv/bin/python build_windowed_feature_dataset.py \
+  --input request_logs_fiu.csv \
+  --input request_logs_msrc.csv \
+  --feature-output multisource_feature_dataset.csv \
+  --detection-output multisource_detection_results.csv \
+  --window-sec 120 \
+  --step-sec 30 \
+  --min-events 10 \
+  --max-windows-per-client 200
+```
+
+This builds a larger trace-derived dataset from multiple standardized request-log sources while automatically tagging client ids per source to avoid collisions.
+
+Already generated in this repo:
+
+- `multisource_dense_feature_dataset.csv`
+- `multisource_dense_detection_results.csv`
+- `dense_artifacts/training_metrics.json`
+- `dense_artifacts/evaluation_report.md`
+
+Current dense-run snapshot:
+
+- raw events loaded: `1,026,034`
+- processed clients: `72`
+- dense window rows: `221`
+- best supervised model: `random_forest`
+- best CV macro F1: `0.9652`
+
+## 10. Scope Note
 
 The current project story is intentionally centered on:
 
@@ -312,7 +377,7 @@ The current project story is intentionally centered on:
 
 Audit endpoints and related lifecycle code remain in the repo as secondary modules, but they are not part of the main demo or thesis claim.
 
-## 10. Notes For Similar Files
+## 11. Notes For Similar Files
 
 If two files are only "slightly similar" in a casual sense, they may still fail to show chunk overlap clearly.
 
@@ -332,7 +397,7 @@ For a reliable presentation, use files with:
 
 That is exactly why the Colab notebook uses controlled payloads.
 
-## 11. Cleanup
+## 12. Cleanup
 
 Generated runtime output is intentionally ignored:
 
