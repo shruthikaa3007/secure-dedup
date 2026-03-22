@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-03-22T12:24:31.709588+00:00",
+  "generated_at_utc": "2026-03-22T17:12:27.777151+00:00",
   "config": {
     "chunks": 300,
     "unique_chunks": 90,
@@ -34,9 +34,9 @@
   ],
   "comparison": {
     "dedup_saved_delta_pct": 0.0,
-    "token_time_delta_pct": 45.809327,
-    "encrypt_time_delta_pct": -6.064054,
-    "decrypt_time_delta_pct": -4.349196,
+    "token_time_delta_pct": 52.659676,
+    "encrypt_time_delta_pct": -3.008216,
+    "decrypt_time_delta_pct": -1.849985,
     "storage_overhead_delta_bytes": 0.0
   },
   "schemes": [
@@ -66,9 +66,9 @@
       "unique_chunk_tokens": 90.0,
       "dedup_saved_chunks": 210.0,
       "dedup_saved_percent": 70.0,
-      "avg_token_time_ms": 0.009199,
-      "avg_encrypt_time_ms": 0.083492,
-      "avg_decrypt_time_ms": 0.09204,
+      "avg_token_time_ms": 0.015735,
+      "avg_encrypt_time_ms": 0.143507,
+      "avg_decrypt_time_ms": 0.160704,
       "avg_plain_chunk_bytes": 4096.0,
       "avg_cipher_chunk_bytes": 4134.0,
       "avg_storage_overhead_bytes": 38.0
@@ -99,9 +99,9 @@
       "unique_chunk_tokens": 90.0,
       "dedup_saved_chunks": 210.0,
       "dedup_saved_percent": 70.0,
-      "avg_token_time_ms": 0.013413,
-      "avg_encrypt_time_ms": 0.078429,
-      "avg_decrypt_time_ms": 0.088037,
+      "avg_token_time_ms": 0.024021,
+      "avg_encrypt_time_ms": 0.13919,
+      "avg_decrypt_time_ms": 0.157731,
       "avg_plain_chunk_bytes": 4096.0,
       "avg_cipher_chunk_bytes": 4134.0,
       "avg_storage_overhead_bytes": 38.0

@@ -4,6 +4,18 @@ This runbook is optimized for the current repo state: Wu et al. as the base
 paper, Swagger as the live demo surface, and the new self-contained tests as
 the fastest way to show the security story clearly.
 
+Fastest recordable path:
+
+```powershell
+.\record_demo.ps1
+```
+
+For a non-interactive run:
+
+```powershell
+.\record_demo.ps1 -AutoAdvance
+```
+
 ## 1. Start The API
 
 ### Windows PowerShell
