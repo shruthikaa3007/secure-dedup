@@ -29,8 +29,7 @@ telemetry.db
 telemetry.db-shm
 telemetry.db-wal
 local_chunks/
-test_reports/
-notebooks/.ipynb_checkpoints/
+
 
 # Local datasets and generated artifacts
 request_logs.csv
