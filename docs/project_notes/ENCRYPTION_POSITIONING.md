@@ -1,5 +1,13 @@
 # Encryption Positioning and Recent-Paper Comparison
 
+## Base Paper Anchor
+
+This repo now treats Wu et al. (JISA 2024) on randomized deduplication encryption against frequency attack as the primary paper anchor.
+
+That means the main thesis question is no longer "how do we add auditing to secure deduplication?" It is:
+
+`How can we improve on deterministic deduplication encryption in a lightweight, demoable secure dedup pipeline?`
+
 ## Proposed Scheme
 
 This project now uses a thesis-safe dedup-aware encryption construction rather than a new cipher:

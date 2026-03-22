@@ -1,11 +1,20 @@
 # secure-dedup
 
-Secure cloud deduplication prototype with four demo-ready ideas:
+Secure cloud deduplication prototype aligned to Wu et al. (JISA 2024), with four demo-ready outcomes:
 
 1. Upload a file once and store only new chunks.
 2. Reuse matching chunks across similar files.
 3. Protect duplicate reuse with proof-of-ownership (PoW).
 4. Show encryption, chunk reuse, and attack throttling clearly in Swagger UI.
+
+Base paper direction:
+
+- Wu et al., *Journal of Information Security and Applications* (2024), on randomized deduplication encryption against frequency attack.
+
+Final-year-project scope note:
+
+- The core claim is the Wu-et-al improvement path only: stronger dedup-aware encryption, visible PoW, and lightweight throttling.
+- Auditing, ownership transfer, and broader data-dynamics code may remain in the repo, but they are not part of the main thesis claim or demo.
 
 ## What This Repo Demonstrates
 
@@ -35,11 +44,12 @@ The custom frontend still exists under `/ui/`, but the recommended presentation 
 - `encryption.py`: fingerprint-bound segmented AES-GCM envelope.
 - `pow.py`, `pow_session.py`, `adaptive_pow.py`: PoW challenge creation and verification.
 - `storage.py`, `dedup_index.py`: chunk storage and ref counting.
-- `file_catalog.py`, `ownership_store.py`, `audit_store.py`: file versions, ownership, and audit support.
+- `file_catalog.py`, `ownership_store.py`: optional lifecycle support kept outside the core demo story.
 - `compare_dedup_encryption_schemes.py`: baseline vs proposed encryption benchmark.
 - `tests/run_smoke_tests.py`: end-to-end smoke flow.
 - `tests/test_encryption.py`: encryption unit tests.
 - `notebooks/encryption_demo_colab.ipynb`: Colab notebook for the encryption + PoW demo story.
+- `docs/project_notes/BASE_PAPER_ALIGNMENT.md`: direct explanation of how this project improves on Wu et al.
 
 ## 1. Clone The Repo
 
@@ -291,7 +301,18 @@ It demonstrates:
 - PoW solve-and-retry,
 - rate-limit evidence.
 
-## 9. Notes For Similar Files
+## 9. Scope Note
+
+The current project story is intentionally centered on:
+
+- dedup-aware encryption,
+- chunk reuse visibility,
+- PoW protection on duplicate reuse,
+- behavioural throttling during suspicious activity.
+
+Audit endpoints and related lifecycle code remain in the repo as secondary modules, but they are not part of the main demo or thesis claim.
+
+## 10. Notes For Similar Files
 
 If two files are only "slightly similar" in a casual sense, they may still fail to show chunk overlap clearly.
 
@@ -311,7 +332,7 @@ For a reliable presentation, use files with:
 
 That is exactly why the Colab notebook uses controlled payloads.
 
-## 10. Cleanup
+## 11. Cleanup
 
 Generated runtime output is intentionally ignored:
 

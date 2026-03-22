@@ -6,53 +6,47 @@ Secure Cloud Deduplication with Secret-Assisted Encrypted Storage, Proof-of-Owne
 
 ## Problem
 
-Normal deduplication saves storage, but it can also let an attacker claim data they do not own if duplicate checks are not protected.
+Classic deduplication is efficient, but deterministic content-based chunk identities can leak useful information to attackers. In particular, Wu et al. motivate the need to move beyond deterministic dedup-encryption behavior because chunk-frequency patterns can reveal sensitive structure.
 
 ## Base Paper Anchor
 
-Peng et al., IEEE TNSM 2025:
-"Secure Deduplication and Cloud Storage Auditing With Efficient Dynamic Ownership Management and Data Dynamics"
+Wu et al., *Journal of Information Security and Applications* (2024):
+"A randomized encryption deduplication method against frequency attack"
 
 ## Final Scope
 
-This project is now defined around one primary pipeline:
+This project is now defined around one primary story:
 
 1. chunk the uploaded file,
-2. derive a secret-assisted dedup token for each chunk,
+2. derive a stronger dedup identity for each chunk,
 3. encrypt stored chunk payloads at rest with token-bound segmented AES-GCM,
-4. detect duplicate claims,
+4. show where similar files reuse the same stored chunks,
 5. require proof-of-ownership before duplicate reuse,
 6. keep behavioural monitoring visible through request telemetry,
-7. show clear metrics for dedup savings and PoW behavior,
-8. demonstrate the storage path on a reproducible LocalStack S3 environment.
+7. show clear metrics for dedup savings, PoW behavior, and throttling events.
 
-## Novelty Over the Base Paper
+## How the Repo Improves on the Base Paper Direction
 
-The repo should present two concrete improvements clearly:
+The repo should present three concrete improvements clearly:
 
 1. Secret-assisted fingerprint-bound encryption
-   Stored chunks use a secret HMAC dedup token and a HKDF-derived segmented AES-GCM envelope.
-   This reduces reliance on public content-only chunk identifiers and ties encryption to the deduplicated chunk identity.
+   Instead of a public content-only dedup token, stored chunks use a secret HMAC dedup token and a HKDF-derived segmented AES-GCM envelope.
 
-2. Step-wise PoW duplicate verification
-   Duplicate uploads do not silently succeed.
-   The client receives a challenge, solves it, and retries the upload with proof.
-   This makes ownership verification visible, testable, and easy to demonstrate.
+2. Visible duplicate-verification workflow
+   Duplicate uploads do not silently succeed. The client receives a PoW challenge, solves it, and retries with proof.
 
-Behavioural monitoring remains a supporting layer:
-recent client activity and request volume stay visible in the dashboard and metrics, but they no longer dominate the UI.
-
-Deployment stance:
-the main demo environment is LocalStack S3 on a local reproducible stack, not a fragile hosted web deployment.
+3. Lightweight runtime abuse control
+   Behavioural monitoring and policy actions (`ALLOW`, `RATE_LIMIT`, `BLOCK`) make suspicious duplicate behavior visible during the demo.
 
 ## What Counts As "Complete"
 
 The project is complete when the following path works cleanly:
 
 1. A first upload succeeds.
-2. A duplicate upload returns a PoW challenge.
-3. Solving the challenge and retrying succeeds.
-4. Metrics show:
+2. A slightly similar or duplicate upload clearly shows chunk reuse.
+3. Duplicate reuse returns a PoW challenge.
+4. Solving the challenge and retrying succeeds.
+5. Metrics show:
    - active files,
    - unique chunks,
    - dedup saved chunks,
@@ -60,15 +54,26 @@ The project is complete when the following path works cleanly:
    - PoW proofs verified or rejected,
    - monitored clients and request volume,
    - encryption enabled status and dedup token mode.
-5. A deployed smoke test can run from Colab and generate a readable report.
+6. The encryption comparison clearly positions the proposed scheme against a deterministic baseline.
 
 ## De-emphasized Items
 
 These are no longer the main project story:
 
-- large research datasets in the repo root,
-- checked-in generated reports,
+- auditing as a thesis-defining contribution,
+- ownership/data-dynamics as the main literature anchor,
 - overloaded demo controls,
-- policy and anomaly features as the primary UI narrative.
+- large checked-in datasets as the primary evidence.
 
-They can remain as secondary modules, but they should not distract from the final project definition.
+They may remain in the repo as secondary modules, but they should not distract from the encryption-focused project definition.
+
+## Out Of Scope For The Final Claim
+
+Do not present these as core contributions:
+
+- integrity auditing protocols,
+- ownership transfer workflows,
+- file lifecycle management as a novelty claim,
+- a brand-new cryptographic primitive.
+
+The final claim is narrower and stronger: a Wu-et-al-inspired secure deduplication prototype that improves deterministic dedup-aware encryption while making chunk reuse, PoW, and throttling easy to observe.

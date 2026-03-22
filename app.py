@@ -451,18 +451,27 @@ def demo_config():
         "server_time_utc": datetime.now(timezone.utc).isoformat(),
         "demo_mode": DEMO_MODE,
         "project": {
-            "title": "Secure Cloud Deduplication with Secret-Assisted Encryption, PoW, and Behavioural Monitoring",
-            "base_paper": "Peng et al., IEEE TNSM 2025",
+            "title": "Secure Deduplication Prototype Centered on Wu et al. (2024)",
+            "base_paper": "Wu et al., Journal of Information Security and Applications, 2024",
+            "thesis_claim": (
+                "Improve deterministic deduplication encryption with a secret-assisted chunk identity, "
+                "fingerprint-bound AES-GCM, visible PoW, and lightweight runtime throttling."
+            ),
             "focus": [
-                "Upload unique content once and store secret-token-bound encrypted chunks.",
+                "Use Wu et al. as the literature anchor for improving deterministic deduplication encryption under frequency-attack concerns.",
+                "Compare a public-hash baseline against a stronger secret-assisted chunk-identity design.",
+                "Upload unique content once and store token-bound encrypted chunks.",
                 "Require proof-of-ownership before reusing duplicate chunks.",
-                "Keep behavioural monitoring visible through runtime activity and metrics.",
-                "Show dedup savings and PoW outcomes with clear runtime metrics.",
+                "Keep runtime monitoring visible through PoW, rate-limit, and chunk-reuse metrics.",
             ],
             "novelty": [
-                "Secret-assisted HMAC dedup tokens bound to HKDF-derived segmented AES-GCM chunk encryption.",
-                "Step-wise PoW challenge flow for duplicate verification.",
-                "Behavioural monitoring retained as lightweight background telemetry.",
+                "Replace public content-only dedup tokens with secret-assisted HMAC chunk identities.",
+                "Bind segmented AES-GCM chunk encryption to those dedup identities through HKDF-derived keys.",
+                "Add visible PoW and runtime throttling on top of the encryption-focused dedup path.",
+            ],
+            "out_of_scope": [
+                "Data auditing is not part of the core thesis claim or main demo flow.",
+                "Ownership transfer and file-version lifecycle support remain secondary code paths.",
             ],
         },
         "auth": {"require_api_key": REQUIRE_API_KEY},
@@ -601,7 +610,7 @@ def demo_solve_pow(
     return {"pow_proofs": proofs}
 
 
-@app.post("/demo/solve_audit")
+@app.post("/demo/solve_audit", include_in_schema=False)
 def demo_solve_audit(
     request: DemoSolveAuditRequest,
     x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
@@ -752,6 +761,36 @@ def demo_encryption_comparison():
     deltas = comparison.get("comparison", {})
     return {
         "status": "ok",
+        "base_paper": {
+            "citation": "J. Wu et al., Journal of Information Security and Applications, 2024",
+            "title": "A randomized encryption deduplication method against frequency attack",
+            "doi": "10.1016/j.jisa.2024.103774",
+            "why_it_matters": (
+                "Wu et al. motivate moving beyond deterministic deduplication encryption because "
+                "frequency patterns can leak sensitive structure."
+            ),
+        },
+        "positioning": {
+            "baseline_story": (
+                "Treat public SHA-256-bound deduplication encryption as the deterministic baseline direction "
+                "to improve on, then compare it with a secret-assisted HMAC-bound alternative."
+            ),
+            "our_improvements": [
+                "Replace public content hashes with secret-assisted HMAC chunk tokens.",
+                "Derive per-chunk AES-GCM keys from those tokens via HKDF-SHA256 while keeping standard cryptographic primitives.",
+                "Add visible proof-of-ownership and lightweight throttling around duplicate reuse.",
+            ],
+            "out_of_scope": [
+                "Data auditing is not part of the core project claim.",
+                "Ownership transfer and file-version workflows are secondary support modules, not primary evaluation evidence.",
+            ],
+            "recommended_demo_endpoints": [
+                "/demo/encryption/comparison",
+                "/upload",
+                "/demo/compare-files",
+                "/demo/highlights/{client_id}",
+            ],
+        },
         "headline": {
             "baseline_scheme": baseline.get("scheme"),
             "proposed_scheme": proposed.get("scheme"),
@@ -1146,7 +1185,7 @@ async def upload_file(
 
 
 
-@app.get("/files")
+@app.get("/files", include_in_schema=False)
 def get_my_files(
     api_key: str = Depends(_require_api_key),
     x_client_id: Optional[str] = Header(default=None, alias="X-Client-ID"),
@@ -1155,7 +1194,7 @@ def get_my_files(
     return {"client_id": client_id, "files": list_files(client_id)}
 
 
-@app.get("/files/{file_id}")
+@app.get("/files/{file_id}", include_in_schema=False)
 def get_file_by_id(
     file_id: str,
     api_key: str = Depends(_require_api_key),
@@ -1171,7 +1210,7 @@ def get_file_by_id(
     return record
 
 
-@app.delete("/files/{file_id}")
+@app.delete("/files/{file_id}", include_in_schema=False)
 def delete_file_by_id(
     file_id: str,
     api_key: str = Depends(_require_api_key),
@@ -1194,7 +1233,7 @@ def delete_file_by_id(
     return {"status": "deleted", "file": record}
 
 
-@app.get("/ownership/{chunk_hash}")
+@app.get("/ownership/{chunk_hash}", include_in_schema=False)
 def get_chunk_ownership(
     chunk_hash: str,
     api_key: str = Depends(_require_api_key),
@@ -1206,7 +1245,7 @@ def get_chunk_ownership(
     return ownership_summary(chunk_hash)
 
 
-@app.post("/ownership/transfer")
+@app.post("/ownership/transfer", include_in_schema=False)
 def transfer_chunk_ownership(
     request: OwnershipTransferRequest,
     api_key: str = Depends(_require_api_key),
@@ -1220,7 +1259,7 @@ def transfer_chunk_ownership(
     return {"status": "transferred", "ownership": ownership_summary(request.chunk_hash)}
 
 
-@app.post("/audit/challenge")
+@app.post("/audit/challenge", include_in_schema=False)
 def create_chunk_audit(
     request: AuditChallengeRequest,
     api_key: str = Depends(_require_api_key),
@@ -1237,7 +1276,7 @@ def create_chunk_audit(
     return {"status": "challenge_created", "challenge": challenge}
 
 
-@app.post("/audit/verify")
+@app.post("/audit/verify", include_in_schema=False)
 def verify_chunk_audit(
     request: AuditVerifyRequest,
     api_key: str = Depends(_require_api_key),
@@ -1250,7 +1289,7 @@ def verify_chunk_audit(
     return result
 
 
-@app.get("/audit/quick/{chunk_hash}")
+@app.get("/audit/quick/{chunk_hash}", include_in_schema=False)
 def quick_chunk_audit(
     chunk_hash: str,
     api_key: str = Depends(_require_api_key),

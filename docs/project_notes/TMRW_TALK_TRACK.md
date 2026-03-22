@@ -1,47 +1,56 @@
 # Tomorrow Talk Track (3-5 minutes)
 
 ## 1) Problem Statement (30-45 sec)
-Cross-user deduplication saves storage, but it is vulnerable to ownership fraud and probing attacks.
-If we keep dedup insecure, providers disable it; if we disable dedup, storage and bandwidth costs rise.
-Our goal is to keep dedup enabled while adding stronger ownership verification and attack-aware controls.
+Wu et al. show that deterministic deduplication encryption can leak useful frequency information.
+At the same time, cloud providers still want deduplication because it saves storage and bandwidth.
+So the project question becomes: how do we keep deduplication useful while making the encryption path less leakage-prone and the duplicate-reuse path safer?
 
-## 2) Baseline We Replicated (45-60 sec)
-We implemented a secure dedup pipeline with proof-of-ownership verification:
-1. Chunking + fingerprint index.
-2. Duplicate detection.
-3. PoW challenge/verify before allowing duplicate reference.
-This is the static baseline.
+## 2) Base Paper Anchor (30-45 sec)
+The base paper is:
 
-## 3) Our Improvement (45-60 sec)
-We added a risk-adaptive control loop:
-1. Behavioral detection produces risk score.
-2. Client reputation tracks prior behavior over time.
-3. Adaptive PoW increases challenge hardness for suspicious clients and keeps normal clients in lower difficulty tiers.
+`J. Wu et al., "A randomized encryption deduplication method against frequency attack," Journal of Information Security and Applications, 2024.`
 
-## 4) Visible Results (60-90 sec)
-Generated today from `request_logs.csv`:
-1. Windowed evaluation dataset: 103 samples, 72 clients.
-2. Holdout detection performance (`demo_artifacts/training_metrics.json`):
-   - CV macro F1: 0.9484
-   - Test accuracy: 0.9615
-   - Test weighted F1: 0.9573
-   - Advanced benchmarked candidates: HistGradientBoosting, RandomForest, LogisticRegression, ExtraTrees, RBF-SVM, MLP
-   - Best selected model by CV: RandomForest
-3. Static vs adaptive PoW (`pow_comparison_summary.json`):
-   - Baseline attacker success (estimated): 1.0000
-   - Adaptive attacker success (estimated): 0.4735
-   - Relative reduction: 52.65%
-   - Adaptive sends most suspicious cases to elevated/hardened tiers.
+That paper motivates improving deterministic dedup-aware encryption.
+My project does not claim to reproduce their full construction exactly.
+Instead, it builds a lighter prototype that improves on the same problem direction in a way that is easy to test and demo.
 
-## 5) Honest Limitations (20-30 sec)
-1. The comparison uses controlled workload assumptions for attack effort estimation.
-2. Benign overhead is still high and needs threshold/weight tuning.
-3. Auditing and full ownership lifecycle are in-progress.
+## 3) What I Implemented (45-60 sec)
+The core implementation has three parts:
 
-## 6) Next Milestone (20-30 sec)
-1. Add integrity auditing API and scheduler.
-2. Add ownership grant/revoke/transfer events.
-3. Tune adaptive policy to reduce benign overhead while preserving attack resistance.
+1. Secret-assisted chunk identity
+   I replaced a plain public `SHA-256` dedup token with `HMAC-SHA256`.
+2. Fingerprint-bound chunk encryption
+   I derive per-chunk keys through `HKDF-SHA256` and encrypt each chunk with segmented `AES-GCM`.
+3. Safe duplicate reuse
+   If a chunk already exists, the client must complete proof-of-ownership before reuse, and suspicious behavior can be rate limited.
+
+## 4) What I Show In The Demo (60-90 sec)
+I show four concrete pieces in Swagger:
+
+1. `GET /demo/encryption/comparison`
+   This compares the public-hash baseline with the proposed secret-assisted scheme.
+2. `POST /upload`
+   The first upload stores encrypted chunks.
+3. Re-upload a duplicate or controlled similar file
+   This shows shared chunks and PoW challenge generation.
+4. `GET /demo/highlights/{client_id}`
+   This shows PoW activity, duplicate reuse success, and rate-limiting events.
+
+## 5) Main Result Lines (30-45 sec)
+The most important result is that deduplication savings stay effectively unchanged while the dedup identity becomes secret-assisted.
+The checked-in benchmark shows:
+
+1. dedup saved percent remains `70%` in both schemes,
+2. storage overhead stays the same,
+3. most extra cost appears in token generation, not encryption or decryption.
+
+That makes the design practical enough for a prototype and easy to defend academically.
+
+## 6) Honest Scope Boundary (20-30 sec)
+I am not presenting auditing or ownership-transfer workflows as my main contribution.
+Those modules may still exist in the repo, but the final claim is narrower:
+
+`a Wu-et-al-inspired secure deduplication prototype with stronger dedup-aware encryption, visible proof-of-ownership, and lightweight runtime throttling.`
 
 ## 7) One-Line Claim
-We already have a working secure dedup baseline plus a measurable adaptive defense extension, with presentation-visible artifacts and reproducible outputs.
+This project improves on the deterministic dedup-encryption direction highlighted by Wu et al. with a secret-assisted, fingerprint-bound secure deduplication pipeline that is measurable, testable, and easy to demonstrate.
