@@ -1,6 +1,6 @@
 # Dedup Encryption Scheme Comparison
 
-- Generated (UTC): `2026-03-22T17:12:27.777151+00:00`
+- Generated (UTC): `2026-03-23T16:05:13.655461+00:00`
 - Chunks: `300`
 - Unique Chunks: `90`
 - Chunk Size: `4096` bytes
@@ -16,9 +16,9 @@
 | Metric | Baseline | Proposed |
 |---|---:|---:|
 | Dedup saved percent | 70.0000 | 70.0000 |
-| Avg token time (ms) | 0.015735 | 0.024021 |
-| Avg encrypt time (ms) | 0.143507 | 0.139190 |
-| Avg decrypt time (ms) | 0.160704 | 0.157731 |
+| Avg token time (ms) | 0.008519 | 0.013566 |
+| Avg encrypt time (ms) | 0.076468 | 0.079984 |
+| Avg decrypt time (ms) | 0.084367 | 0.089534 |
 | Avg storage overhead (bytes) | 38.00 | 38.00 |
 
 ## Demo-Facing Security Properties
@@ -31,9 +31,9 @@
 
 ## Relative Delta of Proposed Scheme
 
-- Token generation delta: `52.6597%`
-- Encryption delta: `-3.0082%`
-- Decryption delta: `-1.8500%`
+- Token generation delta: `59.2440%`
+- Encryption delta: `4.5980%`
+- Decryption delta: `6.1244%`
 - Storage overhead delta: `0.00` bytes
 
 ## Interpretation
