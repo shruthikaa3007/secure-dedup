@@ -1,14 +1,14 @@
-fastapi
-uvicorn
-python-multipart
-redis
-boto3
-minio
-fastcdc
-pyfastcdc
-pandas
-numpy
-scikit-learn==1.7.2
-joblib
-pycryptodome
-requests
+pycryptodome==3.20.0
+argon2-cffi==23.1.0
+cryptography==42.0.0
+# OPRF v1: uses HMAC simulation - no external package needed
+# Upgrade path: cryptography>=42.0.0 already listed, supports Ristretto255
+boto3==1.34.0
+localstack-client==2.0
+numpy==1.26.4
+scipy==1.13.0
+matplotlib==3.9.0
+pandas==2.2.0
+jupyter==1.0.0
+pytest==8.2.0
+tqdm==4.66.0

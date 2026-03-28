@@ -3,16 +3,21 @@ __pycache__/
 *.py[cod]
 *.so
 .Python
+build/
+dist/
+*.egg-info/
 
 # Virtual environments
 .venv/
+.venv-local/
 venv/
 env/
 
-# Test / lint / coverage caches
+# Test / notebook caches
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.ipynb_checkpoints/
 .coverage
 coverage.xml
 htmlcov/
@@ -23,6 +28,7 @@ htmlcov/
 .idea/
 
 # Local runtime outputs
+localstack_data/
 uploads/
 *.log
 telemetry.db
@@ -30,31 +36,21 @@ telemetry.db-shm
 telemetry.db-wal
 local_chunks/
 
-
-# Local datasets and generated artifacts
-request_logs.csv
-request_logs_*.csv
-detection_results.csv
-feature_dataset.csv
-training_data.csv
-demo_detection_results.csv
-demo_feature_dataset.csv
-pow_comparison_details.csv
-pow_comparison_summary.json
+# Generated data / artifacts
+data/chunks_normal/
+data/chunks_bot/
+data/sample_chunks_generated/
+*.csv
+*.png
+*.db
+*.db-shm
+*.db-wal
 *.tar
 *.tar.gz
 *.tgz
 *.rar
-model_metadata.json
-training_metrics.json
-evaluation_report.json
-evaluation_report.md
-scaler.pkl
-isolation_forest.pkl
-one_class_svm.pkl
-attack_classifier.pkl
-attack_label_encoder.pkl
-dense_autoencoder.keras
-dense_ae_threshold.npy
-lstm_autoencoder.keras
-lstm_threshold.npy
+
+# Legacy large assets kept out of the rewritten workflow
+*.docx
+*.rtf
+*.pdf

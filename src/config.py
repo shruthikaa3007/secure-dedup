@@ -1,0 +1,43 @@
+﻿from __future__ import annotations
+
+import os
+
+# Chunking
+CHUNK_SIZES = [4096, 8192, 16384]
+DEFAULT_CHUNK_SIZE = int(os.getenv("DEFAULT_CHUNK_SIZE", str(CHUNK_SIZES[0])))
+
+# Crypto
+KEY_LENGTH = 32
+T_M = int(os.getenv("T_M", "5"))
+Q_P = int(os.getenv("Q_P", "100"))
+ARGON2_MEMORY = int(os.getenv("ARGON2_MEMORY", "65536"))
+ARGON2_ITERATIONS = int(os.getenv("ARGON2_ITERATIONS", "3"))
+ARGON2_PARALLELISM = int(os.getenv("ARGON2_PARALLELISM", "4"))
+ARGON2_HASH_LEN = KEY_LENGTH
+EPOCH_DURATION_DAYS = int(os.getenv("EPOCH_DURATION_DAYS", "7"))
+
+# Behavioral
+BOT_TAU_THRESHOLD_MS = float(os.getenv("BOT_TAU_THRESHOLD_MS", "5.0"))
+BPOW_DIFFICULTY_EASY = int(os.getenv("BPOW_DIFFICULTY_EASY", "12"))
+BPOW_DIFFICULTY_MEDIUM = int(os.getenv("BPOW_DIFFICULTY_MEDIUM", "16"))
+BPOW_DIFFICULTY_HARD = int(os.getenv("BPOW_DIFFICULTY_HARD", "20"))
+BPOW_DIFFICULTY_EXTREME = int(os.getenv("BPOW_DIFFICULTY_EXTREME", "26"))
+ANOMALY_Z_THRESHOLD = float(os.getenv("ANOMALY_Z_THRESHOLD", "3.0"))
+BEHAVIORAL_WINDOW = int(os.getenv("BEHAVIORAL_WINDOW", "20"))
+TOTP_WINDOW = int(os.getenv("TOTP_WINDOW", "30"))
+DEFAULT_HUMAN_DELAY_MS = float(os.getenv("DEFAULT_HUMAN_DELAY_MS", "100.0"))
+DEFAULT_BOT_DELAY_MS = float(os.getenv("DEFAULT_BOT_DELAY_MS", "1.0"))
+
+# OPRF
+OPRF_BACKEND = os.getenv("OPRF_BACKEND", "hmac").strip().lower()
+
+# Cloud
+LOCALSTACK_ENDPOINT = os.getenv("LOCALSTACK_ENDPOINT", "http://127.0.0.1:4566")
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "test")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "test")
+S3_BUCKET = os.getenv("S3_BUCKET", "dedup-ciphertexts")
+DYNAMO_DTABLE = os.getenv("DYNAMO_DTABLE", "DTable")
+DYNAMO_UTABLE = os.getenv("DYNAMO_UTABLE", "UTable")
+DYNAMO_AUDIT = os.getenv("DYNAMO_AUDIT", "BPoWAuditLog")
+DYNAMO_EPOCH = os.getenv("DYNAMO_EPOCH", "EpochTable")
