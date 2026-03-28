@@ -1,6 +1,7 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import hashlib
+import hmac
 import os
 import time
 from dataclasses import dataclass, field
@@ -8,7 +9,7 @@ from dataclasses import dataclass, field
 from src.behavioral.anomaly import UserBehavioralProfile
 from src.behavioral.pow import verify_pow
 from src.cloud.dynamo_client import audit_log_get_user_history, audit_log_write, epoch_expire, epoch_store
-from src.config import ANOMALY_Z_THRESHOLD, BEHAVIORAL_WINDOW, EPOCH_DURATION_DAYS, Q_P
+from src.config import ANOMALY_Z_THRESHOLD, BEHAVIORAL_WINDOW, EPOCH_DURATION_DAYS, MAX_CHUNK_REQUESTS_PER_EPOCH, Q_P
 from src.crypto.convergent import compute_fingerprint
 from src.crypto.oprf import full_oprf
 
@@ -25,10 +26,17 @@ class RateLimitExceeded(RuntimeError):
     pass
 
 
+class ChunkHotspotDetected(RuntimeError):
+    pass
+
+
 @dataclass
 class KeyServer:
     rate_limit_counters: dict[tuple[str, int], int] = field(default_factory=dict)
+    chunk_request_counters: dict[tuple[str, int], int] = field(default_factory=dict)
     epoch_keys: dict[int, bytes] = field(default_factory=dict)
+    dedup_secret: bytes = field(default_factory=lambda: os.urandom(32))
+    max_chunk_requests_per_epoch: int = MAX_CHUNK_REQUESTS_PER_EPOCH
     current_epoch: int = field(
         default_factory=lambda: int(time.time() // max(1, (EPOCH_DURATION_DAYS * 86400)))
     )
@@ -64,6 +72,11 @@ class KeyServer:
                 profile.update(B_vector)
         return profile
 
+    def derive_private_chunk_locator(self, chunk: bytes) -> str:
+        chunk_hash = compute_fingerprint(chunk)
+        payload = b"secure-dedup-bpow/chunk-locator" + chunk_hash
+        return hmac.new(self.dedup_secret, payload, hashlib.sha256).hexdigest()
+
     def check_rate_limit(self, user_id: str, epoch: int) -> bool:
         key = (user_id, epoch)
         current_count = self.rate_limit_counters.get(key, 0)
@@ -72,7 +85,17 @@ class KeyServer:
         self.rate_limit_counters[key] = current_count + 1
         return True
 
-    def get_K_M(self, chunk: bytes, user_id: str, bpow_proof: dict) -> bytes:
+    def check_chunk_hotspot(self, chunk_locator: str, epoch: int) -> bool:
+        key = (chunk_locator, epoch)
+        current_count = self.chunk_request_counters.get(key, 0)
+        if current_count >= self.max_chunk_requests_per_epoch:
+            raise ChunkHotspotDetected(
+                f"Chunk hotspot throttled for locator '{chunk_locator[:12]}' in epoch {epoch}"
+            )
+        self.chunk_request_counters[key] = current_count + 1
+        return True
+
+    def authorize_chunk(self, chunk: bytes, user_id: str, bpow_proof: dict) -> dict:
         B_vector = bpow_proof["B_vector"]
         session_id = str(bpow_proof["session_id"])
         epoch = int(bpow_proof.get("epoch", self.current_epoch))
@@ -102,11 +125,21 @@ class KeyServer:
             raise AnomalyDetected("Behavioral z-score threshold exceeded")
 
         self.check_rate_limit(user_id, current_epoch)
+        chunk_locator = self.derive_private_chunk_locator(chunk)
+        self.check_chunk_hotspot(chunk_locator, current_epoch)
+
         chunk_tag = compute_fingerprint(chunk).hex().encode("utf-8")
         epoch_key = self._get_epoch_key(current_epoch)
         # v1: calls full_oprf(chunk_tag, epoch_key) - single-process simulation
         # v2: calls evaluate() only; blind/unblind run on client side
-        return full_oprf(chunk_tag, epoch=current_epoch, epoch_key=epoch_key)
+        return {
+            "K_M": full_oprf(chunk_tag, epoch=current_epoch, epoch_key=epoch_key),
+            "chunk_locator": chunk_locator,
+            "epoch": current_epoch,
+        }
+
+    def get_K_M(self, chunk: bytes, user_id: str, bpow_proof: dict) -> bytes:
+        return self.authorize_chunk(chunk, user_id, bpow_proof)["K_M"]
 
     def rotate_epoch_key(self) -> int:
         old_epoch = self.current_epoch

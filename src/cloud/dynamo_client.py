@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import base64
 import time
@@ -115,13 +115,17 @@ def dtable_get(chunk_tag: str) -> dict | None:
 
 
 def dtable_put(chunk_tag: str, s3_key: str, epoch: int, T_M: int = 5):
+    now = int(time.time())
     item = {
         "chunk_tag": chunk_tag,
         "s3_key": s3_key,
         "upload_count": 1,
+        "owner_count": 1,
+        "rotation_count": 0,
+        "last_rotation_at": 0,
         "T_M": T_M,
         "epoch": epoch,
-        "updated_at": int(time.time()),
+        "updated_at": now,
     }
     _table(DYNAMO_DTABLE).put_item(Item=_normalize(item))
     return item
@@ -131,7 +135,11 @@ def dtable_increment_counter(chunk_tag: str) -> dict:
     table = _table(DYNAMO_DTABLE)
     result = table.update_item(
         Key={"chunk_tag": chunk_tag},
-        UpdateExpression="SET upload_count = if_not_exists(upload_count, :zero) + :inc, updated_at = :ts",
+        UpdateExpression=(
+            "SET upload_count = if_not_exists(upload_count, :zero) + :inc, "
+            "owner_count = if_not_exists(owner_count, :zero) + :inc, "
+            "updated_at = :ts"
+        ),
         ExpressionAttributeValues={
             ":zero": Decimal(0),
             ":inc": Decimal(1),
@@ -142,14 +150,39 @@ def dtable_increment_counter(chunk_tag: str) -> dict:
     return _restore(result["Attributes"])
 
 
-def utable_add_ownership(user_id: str, chunk_tag: str, t: bytes, epoch: int):
+def dtable_mark_rotation(chunk_tag: str) -> dict:
+    table = _table(DYNAMO_DTABLE)
+    now = Decimal(int(time.time()))
+    result = table.update_item(
+        Key={"chunk_tag": chunk_tag},
+        UpdateExpression=(
+            "SET rotation_count = if_not_exists(rotation_count, :zero) + :inc, "
+            "last_rotation_at = :ts, updated_at = :ts"
+        ),
+        ExpressionAttributeValues={
+            ":zero": Decimal(0),
+            ":inc": Decimal(1),
+            ":ts": now,
+        },
+        ReturnValues="ALL_NEW",
+    )
+    return _restore(result["Attributes"])
+
+
+def dtable_count() -> int:
+    items = _table(DYNAMO_DTABLE).scan().get("Items", [])
+    return len(items)
+
+
+def utable_add_ownership(user_id: str, chunk_tag: str, chunk_locator: str, t: bytes, epoch: int):
     table = _table(DYNAMO_UTABLE)
     existing = table.get_item(Key={"user_id": user_id}).get("Item") or {"user_id": user_id, "chunks": []}
     chunks = _restore(existing.get("chunks", []))
-    updated_chunks = [chunk for chunk in chunks if chunk.get("chunk_tag") != chunk_tag]
+    updated_chunks = [chunk for chunk in chunks if chunk.get("chunk_locator") != chunk_locator]
     updated_chunks.append(
         {
             "chunk_tag": chunk_tag,
+            "chunk_locator": chunk_locator,
             "ownership_token_t": base64.b64encode(t).decode("ascii"),
             "epoch": epoch,
             "updated_at": int(time.time()),

@@ -12,9 +12,22 @@ Notebook-first secure cloud deduplication prototype aligned to Wu et al. (JISA 2
 The implementation is organized into four subsystems:
 
 - `src.crypto`: REFA-style encryption, key derivation, identity, OPRF abstraction, and key-server logic.
-- `src.behavioral`: behavioral vector extraction, authenticated BPoW, and anomaly detection.
+- `src.behavioral`: behavioral vector extraction, authenticated BPoW, supervised risk scoring, unsupervised anomaly detection, and z-score monitoring.
 - `src.cloud`: LocalStack-backed S3 and DynamoDB adapters.
 - `src.system`: top-level orchestration through `SecureDedupSystem`.
+
+The behavioral pipeline now combines:
+
+- a supervised classifier for human-vs-bot session scoring,
+- an unsupervised detector for outlier behavior,
+- and the existing rolling z-score checks for transparent fallback behavior.
+
+The deduplication path is hardened in two additional ways:
+
+- chunk locators are server-private keyed tags rather than raw public SHA-256 fingerprints,
+- and the public `chunk_tags` returned by `upload()` are opaque per-user download handles.
+
+This means upload responses do not expose direct dedup-hit signals, which reduces confirmation-style hash probing. The key server also rate-limits per user and throttles per-chunk hotspots to reduce dedup-DoS pressure.
 
 The public entrypoints are:
 

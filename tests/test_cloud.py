@@ -1,4 +1,4 @@
-﻿import io
+import io
 
 from src.cloud import dynamo_client, s3_client
 
@@ -55,8 +55,15 @@ class FakeTable:
     def update_item(self, Key, UpdateExpression, ExpressionAttributeValues, ReturnValues):
         key = Key[self.key_name]
         item = self.items.setdefault(key, {self.key_name: key})
-        current = item.get("upload_count", 0)
-        item["upload_count"] = current + 1
+        if "rotation_count" in UpdateExpression:
+            current = item.get("rotation_count", 0)
+            item["rotation_count"] = current + 1
+            item["last_rotation_at"] = ExpressionAttributeValues[":ts"]
+        else:
+            current_uploads = item.get("upload_count", 0)
+            current_owners = item.get("owner_count", 0)
+            item["upload_count"] = current_uploads + 1
+            item["owner_count"] = current_owners + 1
         item["updated_at"] = ExpressionAttributeValues[":ts"]
         self.items[key] = item
         return {"Attributes": item}
@@ -103,10 +110,15 @@ def test_dynamo_client_crud(monkeypatch):
     assert dynamo_client.dtable_get("chunk-a")["s3_key"] == "chunk-a.bin"
     updated = dynamo_client.dtable_increment_counter("chunk-a")
     assert int(updated["upload_count"]) == 2
+    assert int(updated["owner_count"]) == 2
+    rotated = dynamo_client.dtable_mark_rotation("chunk-a")
+    assert int(rotated["rotation_count"]) == 1
+    assert dynamo_client.dtable_count() == 1
 
-    dynamo_client.utable_add_ownership("user-a", "chunk-a", b"token", 1)
+    dynamo_client.utable_add_ownership("user-a", "handle-a", "locator-a", b"token", 1)
     ownership = dynamo_client.utable_get_user_chunks("user-a")
-    assert ownership[0]["chunk_tag"] == "chunk-a"
+    assert ownership[0]["chunk_tag"] == "handle-a"
+    assert ownership[0]["chunk_locator"] == "locator-a"
     assert ownership[0]["ownership_token_t"] == b"token"
 
     dynamo_client.audit_log_write("session-a", "user-a", {"tau_avg": 100.0}, 5, {"is_anomalous": False}, 1)

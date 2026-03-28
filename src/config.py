@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
 
@@ -27,6 +27,12 @@ BEHAVIORAL_WINDOW = int(os.getenv("BEHAVIORAL_WINDOW", "20"))
 TOTP_WINDOW = int(os.getenv("TOTP_WINDOW", "30"))
 DEFAULT_HUMAN_DELAY_MS = float(os.getenv("DEFAULT_HUMAN_DELAY_MS", "100.0"))
 DEFAULT_BOT_DELAY_MS = float(os.getenv("DEFAULT_BOT_DELAY_MS", "1.0"))
+SUPERVISED_HUMAN_PROB_THRESHOLD = float(os.getenv("SUPERVISED_HUMAN_PROB_THRESHOLD", "0.60"))
+UNSUPERVISED_SCORE_THRESHOLD = float(os.getenv("UNSUPERVISED_SCORE_THRESHOLD", "0.0"))
+MODEL_DIFFICULTY_STEP = int(os.getenv("MODEL_DIFFICULTY_STEP", "2"))
+MODEL_BOOTSTRAP_SAMPLES = int(os.getenv("MODEL_BOOTSTRAP_SAMPLES", "256"))
+BEHAVIORAL_MODEL_RANDOM_STATE = int(os.getenv("BEHAVIORAL_MODEL_RANDOM_STATE", "202403"))
+MAX_CHUNK_REQUESTS_PER_EPOCH = int(os.getenv("MAX_CHUNK_REQUESTS_PER_EPOCH", "32"))
 
 # OPRF
 OPRF_BACKEND = os.getenv("OPRF_BACKEND", "hmac").strip().lower()

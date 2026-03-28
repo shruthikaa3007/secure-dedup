@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import hashlib
 import json
@@ -36,8 +36,12 @@ class BehavioralSession:
         delays = self._delays()
         tau_avg = float(np.mean(delays)) if delays else 0.0
         tau_std = float(np.std(delays)) if delays else 0.0
+        tau_min = float(np.min(delays)) if delays else 0.0
+        tau_max = float(np.max(delays)) if delays else 0.0
         entropy_mean = float(np.mean(self.chunk_entropies)) if self.chunk_entropies else 0.0
         entropy_std = float(np.std(self.chunk_entropies)) if self.chunk_entropies else 0.0
+        entropy_min = float(np.min(self.chunk_entropies)) if self.chunk_entropies else 0.0
+        entropy_max = float(np.max(self.chunk_entropies)) if self.chunk_entropies else 0.0
         tau_seq_hash = hashlib.sha256(json.dumps(self.timestamps, separators=(",", ":")).encode("utf-8")).hexdigest()
         entropy_dist_hash = hashlib.sha256(
             json.dumps(self.chunk_entropies, separators=(",", ":")).encode("utf-8")
@@ -46,9 +50,14 @@ class BehavioralSession:
         return {
             "tau_avg": tau_avg,
             "tau_std": tau_std,
+            "tau_min": tau_min,
+            "tau_max": tau_max,
+            "interarrival_cv": float(tau_std / tau_avg) if tau_avg > 0 else 0.0,
             "tau_seq_hash": tau_seq_hash,
             "entropy_mean": entropy_mean,
             "entropy_std": entropy_std,
+            "entropy_min": entropy_min,
+            "entropy_max": entropy_max,
             "entropy_dist_hash": entropy_dist_hash,
             "chunk_order_hash": chunk_order_hash,
             "n_chunks": len(self.chunk_hashes),

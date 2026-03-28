@@ -1,6 +1,4 @@
-version: "3.8"
-
-services:
+﻿services:
   localstack:
     image: localstack/localstack:3.4
     ports:
@@ -8,6 +6,5 @@ services:
     environment:
       - SERVICES=s3,dynamodb
       - DEFAULT_REGION=us-east-1
-      - DATA_DIR=/tmp/localstack/data
     volumes:
-      - "./localstack_data:/tmp/localstack/data"
+      - "./localstack_data:/var/lib/localstack"

@@ -1,11 +1,13 @@
-﻿import hashlib
+import hashlib
 import os
 import socket
 from urllib.parse import urlparse
 
 import pytest
 
+from src.cloud.dynamo_client import dtable_count, dtable_get
 from src.config import LOCALSTACK_ENDPOINT
+from src.crypto.convergent import chunk_file, compute_fingerprint
 from src.crypto.kdf import derive_K_U
 from src.system import SecureDedupSystem
 
@@ -14,7 +16,8 @@ RUN_LOCALSTACK = os.getenv("RUN_LOCALSTACK_TESTS") == "1"
 
 
 def _make_payload_file(tmp_path, name="sample.bin"):
-    payload = (b"secure-dedup-bpow-payload" * 512)[:8192]
+    seed = name.encode("utf-8") + b"|secure-dedup-bpow-payload|"
+    payload = (seed * 1024)[:8192]
     file_path = tmp_path / name
     file_path.write_bytes(payload)
     return file_path
@@ -44,9 +47,14 @@ def _make_manual_proof(system: SecureDedupSystem, user_id: str, password: str):
     session = {
         "tau_avg": 120.0,
         "tau_std": 5.0,
+        "tau_min": 110.0,
+        "tau_max": 130.0,
+        "interarrival_cv": 0.04,
         "tau_seq_hash": hashlib.sha256(b"tau").hexdigest(),
         "entropy_mean": 7.0,
         "entropy_std": 0.1,
+        "entropy_min": 6.9,
+        "entropy_max": 7.1,
         "entropy_dist_hash": hashlib.sha256(b"entropy").hexdigest(),
         "chunk_order_hash": hashlib.sha256(b"order").hexdigest(),
         "n_chunks": 2,
@@ -88,22 +96,48 @@ def test_rotate_epoch_key_directly_changes_km(tmp_path):
 
 def test_localstack_upload_download_and_dedup(tmp_path):
     _require_localstack()
-    file_path = _make_payload_file(tmp_path)
+    file_path = _make_payload_file(tmp_path, name="cross-user-dedup.bin")
+    chunks = chunk_file(str(file_path))
+    baseline_count = dtable_count()
     system = SecureDedupSystem(ensure_infra=True)
     first = system.upload("user-one", str(file_path), "password-one")
+    after_first_count = dtable_count()
     second = system.upload("user-two", str(file_path), "password-two")
     downloaded = system.download("user-one", first["chunk_tags"], "password-one")
 
     assert first["chunk_count"] > 0
-    assert second["dedup_hits"] >= 1
+    assert first["chunk_tag_mode"] == "opaque_handle"
+    assert first["privacy_preserving"] is True
+    assert "dedup_hits" not in first
+    assert after_first_count == baseline_count + len(chunks)
+    assert dtable_count() == after_first_count
+    assert first["chunk_tags"] != second["chunk_tags"]
+    assert first["chunk_tags"][0] != compute_fingerprint(chunks[0]).hex()
     assert b"".join(downloaded) == file_path.read_bytes()
+
+
+def test_localstack_same_owner_reupload_is_idempotent(tmp_path):
+    _require_localstack()
+    file_path = _make_payload_file(tmp_path, name="idempotent.bin")
+    baseline_count = dtable_count()
+    system = SecureDedupSystem(ensure_infra=True)
+    first = system.upload("same-user", str(file_path), "same-password")
+    after_first_count = dtable_count()
+    second = system.upload("same-user", str(file_path), "same-password")
+
+    assert first["chunk_tags"] == second["chunk_tags"]
+    assert after_first_count > baseline_count
+    assert dtable_count() == after_first_count
 
 
 def test_localstack_ciphertext_rotation(tmp_path):
     _require_localstack()
-    file_path = _make_payload_file(tmp_path)
+    file_path = _make_payload_file(tmp_path, name="rotation.bin")
     system = SecureDedupSystem(ensure_infra=True)
-    summaries = []
-    for _ in range(5):
-        summaries.append(system.upload("rotation-user", str(file_path), "rotation-password"))
-    assert summaries[-1]["rotated_ciphertexts"]
+    for index in range(5):
+        system.upload(f"rotation-user-{index}", str(file_path), f"rotation-password-{index}")
+
+    first_chunk = chunk_file(str(file_path))[0]
+    chunk_locator = system.key_server.derive_private_chunk_locator(first_chunk)
+    entry = dtable_get(chunk_locator)
+    assert int(entry["rotation_count"]) >= 1
