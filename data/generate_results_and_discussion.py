@@ -24,16 +24,16 @@ if str(ROOT) not in sys.path:
 
 from data.generate_synthetic_fsl import CHUNK_SIZE, generate_zipf_chunks
 from src.behavioral.final_year_eval import generate_attack_vectors, generate_calibrated_benign_vectors, generate_final_year_report
-from src.cloud.dynamo_client import bootstrap_tables, dtable_count
+from src.cloud.dynamo_client import bootstrap_tables, dtable_get
 from src.cloud.s3_client import ensure_bucket
-from src.crypto.convergent import compute_fingerprint, refa_decrypt, refa_encrypt
+from src.crypto.convergent import chunk_file, compute_fingerprint, refa_decrypt, refa_encrypt
 from src.crypto.key_server import KeyServer
 from src.crypto.oprf_backends import HMACBackend, Ristretto255Backend
 from src.system import SecureDedupSystem
 
 
 CHUNK_SIZES = (4096, 8192, 16384)
-FILE_SIZES = (16 * 1024, 64 * 1024, 256 * 1024)
+FILE_SIZES = (8 * 1024, 16 * 1024, 32 * 1024)
 
 
 def _time_ms(fn, *args, **kwargs):
@@ -231,45 +231,35 @@ def run_system_workflow_benchmark() -> tuple[pd.DataFrame, pd.DataFrame]:
         dedup_path = tempdir_path / "dedup_target.bin"
         dedup_path.write_bytes(dedup_payload)
 
-        before_count = dtable_count()
+        dedup_chunks = chunk_file(str(dedup_path), chunk_size=CHUNK_SIZE)
+        dedup_locators = sorted({system.key_server.derive_private_chunk_locator(chunk) for chunk in dedup_chunks})
+        before_known = {locator: dtable_get(locator) is not None for locator in dedup_locators}
         first_summary, first_ms = _time_ms(system.upload, "dedup-a", str(dedup_path), "dedup-password-a")
-        after_first = dtable_count()
+        after_first_known = {locator: dtable_get(locator) is not None for locator in dedup_locators}
         second_summary, second_ms = _time_ms(system.upload, "dedup-b", str(dedup_path), "dedup-password-b")
-        after_second = dtable_count()
+        after_second_known = {locator: dtable_get(locator) is not None for locator in dedup_locators}
+
+        first_dtable_delta = sum((not before_known[locator]) and after_first_known[locator] for locator in dedup_locators)
+        second_dtable_delta = sum((not after_first_known[locator]) and after_second_known[locator] for locator in dedup_locators)
 
         attack_rows.append(
             {
                 "scenario": "cross_user_duplicate_reuse",
                 "first_upload_ms": first_ms,
                 "second_upload_ms": second_ms,
-                "first_dtable_delta": after_first - before_count,
-                "second_dtable_delta": after_second - after_first,
+                "first_dtable_delta": first_dtable_delta,
+                "second_dtable_delta": second_dtable_delta,
                 "chunk_count": first_summary["chunk_count"],
                 "privacy_preserving": bool(first_summary["privacy_preserving"] and second_summary["privacy_preserving"]),
             }
         )
 
-        bot_results = []
-        for index in range(5):
-            bot_result = system.simulate_bot_attack(f"bot-eval-{index}", str(dedup_path))
-            bot_results.append(bool(bot_result.get("rejected")))
-
-        replay_results = []
-        for index in range(5):
-            replay_result = system.simulate_replay_attack(first_summary["bpow_proof"])
-            replay_results.append(bool(replay_result.get("rejected")))
-
         attack_rows.extend(
             [
                 {
-                    "scenario": "bot_attack_rejection_rate",
-                    "rejection_rate": sum(bot_results) / len(bot_results),
-                    "trials": len(bot_results),
-                },
-                {
                     "scenario": "replay_attack_rejection_rate",
-                    "rejection_rate": sum(replay_results) / len(replay_results),
-                    "trials": len(replay_results),
+                    "rejection_rate": 1.0 if system.simulate_replay_attack(first_summary["bpow_proof"])["rejected"] else 0.0,
+                    "trials": 1,
                 },
             ]
         )
@@ -282,7 +272,21 @@ def _table_to_markdown(df: pd.DataFrame, digits: int = 6) -> str:
     for column in rounded.columns:
         if pd.api.types.is_numeric_dtype(rounded[column]):
             rounded[column] = rounded[column].map(lambda value: round(float(value), digits))
-    return rounded.to_markdown(index=False)
+    columns = list(rounded.columns)
+    lines = [
+        "| " + " | ".join(str(column) for column in columns) + " |",
+        "| " + " | ".join(["---"] * len(columns)) + " |",
+    ]
+    for _, row in rounded.iterrows():
+        values = []
+        for column in columns:
+            value = row[column]
+            if pd.isna(value):
+                values.append("")
+            else:
+                values.append(str(value))
+        lines.append("| " + " | ".join(values) + " |")
+    return "\n".join(lines)
 
 
 def _save_plot(fig, path: Path) -> None:
@@ -418,15 +422,15 @@ def generate_figures(
     _save_plot(fig, attack_path)
 
     return {
-        "crypto_latency": str(crypto_latency_path.relative_to(outdir)),
-        "oprf_latency": str(oprf_latency_path.relative_to(outdir)),
-        "storage_ratio": str(storage_ratio_path.relative_to(outdir)),
-        "dedup_savings": str(dedup_savings_path.relative_to(outdir)),
-        "alignment": str(alignment_path.relative_to(outdir)),
-        "tau_hist": str(tau_hist_path.relative_to(outdir)),
-        "ablation": str(ablation_path.relative_to(outdir)),
-        "workflow": str(workflow_path.relative_to(outdir)),
-        "attacks": str(attack_path.relative_to(outdir)),
+        "crypto_latency": crypto_latency_path.relative_to(outdir).as_posix(),
+        "oprf_latency": oprf_latency_path.relative_to(outdir).as_posix(),
+        "storage_ratio": storage_ratio_path.relative_to(outdir).as_posix(),
+        "dedup_savings": dedup_savings_path.relative_to(outdir).as_posix(),
+        "alignment": alignment_path.relative_to(outdir).as_posix(),
+        "tau_hist": tau_hist_path.relative_to(outdir).as_posix(),
+        "ablation": ablation_path.relative_to(outdir).as_posix(),
+        "workflow": workflow_path.relative_to(outdir).as_posix(),
+        "attacks": attack_path.relative_to(outdir).as_posix(),
     }
 
 
@@ -458,7 +462,6 @@ def write_results_discussion(
     dedup_gain = dedup_table.loc[dedup_table["scheme"] == "secure_dedup_bpow", "storage_savings_percent"].iloc[0]
     crypto_key_cost = crypto_latency["secure_key_path_ms"].mean() / max(crypto_latency["baseline_token_ms"].mean(), 1e-9)
     workflow_duplicate = workflow_attacks[workflow_attacks["scenario"] == "cross_user_duplicate_reuse"].iloc[0]
-    bot_rejection = workflow_attacks[workflow_attacks["scenario"] == "bot_attack_rejection_rate"]["rejection_rate"].iloc[0]
     replay_rejection = workflow_attacks[workflow_attacks["scenario"] == "replay_attack_rejection_rate"]["rejection_rate"].iloc[0]
     supervised_row = ablation_table[ablation_table["method"] == "supervised_only"].iloc[0]
     full_row = ablation_table[ablation_table["method"] == "full_behavioral_gate"].iloc[0]
@@ -539,13 +542,13 @@ def write_results_discussion(
         "",
         f"The duplicate reuse experiment is especially important. The first upload increased the dedup metadata table by `{int(workflow_duplicate['first_dtable_delta'])}` unique chunks, while the second cross-user upload increased it by only `{int(workflow_duplicate['second_dtable_delta'])}`. That demonstrates the main systems goal: duplicate data is reused instead of stored again, but reuse still passes through proof-of-ownership and the secure key path.",
         "",
-        f"Bot attacks and replay attacks were both rejected at a rate of `{bot_rejection:.2%}` and `{replay_rejection:.2%}`, respectively, in the scripted evaluation. These results support the claim that the system does not only protect data at rest; it also applies behavioral and epoch-based controls at request time.",
+        f"The replay attack trial was rejected at a rate of `{replay_rejection:.2%}` in the scripted evaluation. Bot-style behavior is evaluated through the behavioral ablation study rather than repeated end-to-end PoW trials, because the extreme-difficulty bot PoW path is intentionally expensive.",
         "",
         "Discussion:",
         "",
         "- End-to-end latency is dominated by cloud-simulation overhead and security checks rather than raw chunk encryption cost.",
         "- Duplicate reuse reduces metadata growth on second upload, which is the clearest practical sign that deduplication still works after the security hardening.",
-        "- The attack simulations are useful validation artifacts, but they are still scripted scenarios rather than live red-team traffic.",
+        "- The replay simulation is an end-to-end validation artifact, while broader bot-style evidence comes from the behavioral study rather than repeated expensive PoW trials.",
         "",
         "## Overall Discussion",
         "",
@@ -554,7 +557,7 @@ def write_results_discussion(
         "1. The secure scheme preserves deduplication savings while replacing public fingerprints with opaque handles and a server-private dedup path.",
         "2. The upgraded `ristretto255` OPRF introduces measurable but acceptable key-path overhead in exchange for a stronger cryptographic core.",
         "3. The behavioral layer is meaningfully better when used as a combined gate than when reduced to transparent z-scores alone.",
-        "4. The LocalStack-backed prototype works end to end for upload, download, duplicate reuse, bot rejection, and replay rejection.",
+        "4. The LocalStack-backed prototype works end to end for upload, download, duplicate reuse, and replay rejection, while bot-style detection is supported by the behavioral study.",
         "",
         "The main limitations remain the same and should be stated plainly:",
         "",
