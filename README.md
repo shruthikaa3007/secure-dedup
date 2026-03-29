@@ -38,7 +38,18 @@ The public entrypoints are:
 
 ## OPRF Note
 
-`src.crypto.oprf` exposes the planned `blind`, `evaluate`, `unblind`, `finalize`, and `full_oprf` API regardless of backend. V1 uses an HMAC-backed simulation through `src.crypto.oprf_backends.HMACBackend` so the project runs without an extra dependency. A stricter `Ristretto255Backend` upgrade path is defined behind the same interface.
+`src.crypto.oprf` exposes the planned `blind`, `evaluate`, `unblind`, `finalize`, and `full_oprf` API regardless of backend. The default backend is now a real `ristretto255` implementation built on libsodium through `rbcl`, which follows the same blind-evaluate-unblind structure used by DupLESS-style blind GDH key servers. A lightweight `HMACBackend` still exists behind the same interface for constrained environments and sensitivity analysis, but it is no longer the default paper path.
+
+The default backend can be changed with:
+
+```powershell
+$env:OPRF_BACKEND = "hmac"
+```
+
+Paper-facing notes that clarify the threat model and the current evaluation story live in:
+
+- `docs/security/SECURITY_MODEL_NOTE.md`
+- `docs/evaluation/TRACE_EVALUATION_NOTE.md`
 
 ## Environment
 

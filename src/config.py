@@ -35,7 +35,7 @@ BEHAVIORAL_MODEL_RANDOM_STATE = int(os.getenv("BEHAVIORAL_MODEL_RANDOM_STATE", "
 MAX_CHUNK_REQUESTS_PER_EPOCH = int(os.getenv("MAX_CHUNK_REQUESTS_PER_EPOCH", "32"))
 
 # OPRF
-OPRF_BACKEND = os.getenv("OPRF_BACKEND", "hmac").strip().lower()
+OPRF_BACKEND = os.getenv("OPRF_BACKEND", "ristretto255").strip().lower()
 
 # Cloud
 LOCALSTACK_ENDPOINT = os.getenv("LOCALSTACK_ENDPOINT", "http://127.0.0.1:4566")
