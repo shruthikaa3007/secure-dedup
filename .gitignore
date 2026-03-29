@@ -18,9 +18,11 @@ env/
 .mypy_cache/
 .ruff_cache/
 .ipynb_checkpoints/
+.jupyter/
 .coverage
 coverage.xml
 htmlcov/
+notebook_runs/
 
 # IDE / OS files
 .DS_Store
@@ -35,11 +37,14 @@ telemetry.db
 telemetry.db-shm
 telemetry.db-wal
 local_chunks/
+tmpclaude-*-cwd
 
 # Generated data / artifacts
 data/chunks_normal/
 data/chunks_bot/
 data/sample_chunks_generated/
+data/sample_core.txt
+data/localstack_demo.txt
 *.csv
 *.png
 *.db
