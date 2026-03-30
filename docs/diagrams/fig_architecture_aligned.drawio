@@ -1,0 +1,164 @@
+<mxfile host="app.diagrams.net" modified="2026-03-30T12:00:00.000Z" agent="GPT-5-Codex" version="24.7.17" editor="diagramly">
+  <diagram id="aligned-arch-20260330" name="Aligned Architecture">
+    <mxGraphModel dx="1800" dy="1100" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="Secure Cloud Deduplication Framework with Behavioural Monitoring" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=26;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="320" y="20" width="1160" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="interface_container" value="Interface Module" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fillColor=#dbe8f8;strokeColor=#4f78bf;fontSize=18;fontStyle=1;align=center;verticalAlign=top;spacingTop=14;" vertex="1" parent="1">
+          <mxGeometry x="40" y="80" width="540" height="420" as="geometry" />
+        </mxCell>
+        <mxCell id="core_container" value="Core Deduplication Module" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fillColor=#fcf4dc;strokeColor=#d8a11e;fontSize=18;fontStyle=1;align=center;verticalAlign=top;spacingTop=14;" vertex="1" parent="1">
+          <mxGeometry x="610" y="80" width="560" height="480" as="geometry" />
+        </mxCell>
+        <mxCell id="security_container" value="Security and Control Module" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fillColor=#fbe5e5;strokeColor=#d25649;fontSize=18;fontStyle=1;align=center;verticalAlign=top;spacingTop=14;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="80" width="560" height="480" as="geometry" />
+        </mxCell>
+        <mxCell id="behavior_container" value="Behaviour Detection Module" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fillColor=#ece1f8;strokeColor=#7b58a8;fontSize=18;fontStyle=1;align=center;verticalAlign=top;spacingTop=14;" vertex="1" parent="1">
+          <mxGeometry x="170" y="620" width="860" height="420" as="geometry" />
+        </mxCell>
+
+        <mxCell id="client" value="Client&#xa;Applications / SDK" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#c5dbf6;strokeColor=#557dc1;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="70" y="160" width="170" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="api" value="FastAPI API + Auth&#xa;/upload&#xa;/pow/challenge&#xa;/pow/verify" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#c5dbf6;strokeColor=#557dc1;fontSize=15;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="280" y="145" width="220" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="telemetry" value="Telemetry Logger&#xa;CSV + SQLite event store" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1eefc;strokeColor=#557dc1;fontSize=15;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="120" y="350" width="280" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="chunking" value="FastCDC&#xa;Chunking" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffefbf;strokeColor=#d7ab2f;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="650" y="155" width="170" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="token" value="HMAC-SHA256&#xa;Token Generation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffefbf;strokeColor=#d7ab2f;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="870" y="155" width="210" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="index" value="Redis Dedup Index&#xa;Ref Count / O(1)&#xa;Lookup" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff4d6;strokeColor=#d7ab2f;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="710" y="320" width="220" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="crypto" value="Ristretto255&#xa;OPRF&#xa;HKDF&#xa;AES-256-GCM" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d6edd8;strokeColor=#4d965b;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="965" y="320" width="180" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="storage" value="Storage Adapter&#xa;S3 / MinIO / Local FS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d6edd8;strokeColor=#4d965b;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="790" y="465" width="240" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="reputation" value="Reputation Manager" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#efefef;strokeColor=#888888;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1280" y="155" width="210" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="cache" value="Redis Policy /&#xa;Reputation Cache" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#efefef;strokeColor=#888888;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1540" y="155" width="190" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="pow" value="Adaptive PoW Engine&#xa;risk + reputation +&#xa;duplicate pressure" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fdd7d7;strokeColor=#d25649;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1270" y="320" width="250" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="policy" value="Policy Engine&#xa;ALLOW /&#xa;RATE_LIMIT /&#xa;BLOCK" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fdd7d7;strokeColor=#d25649;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1550" y="320" width="180" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="features" value="Feature Extraction&#xa;12 behavioural signals" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e4d3f5;strokeColor=#7b58a8;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="240" y="735" width="250" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="detector" value="Detector&#xa;Supervised RF&#xa;Cold-start OCSVM&#xa;risk score r, label ŷ" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e4d3f5;strokeColor=#7b58a8;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="570" y="720" width="330" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="models" value="Model Artifacts&#xa;supervised + cold-start artefacts" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f4f2f8;strokeColor=#8c8c8c;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="340" y="900" width="330" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_client_api" value="" style="endArrow=classic;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=3;" edge="1" parent="1" source="client" target="api">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_api_chunk" value="" style="endArrow=classic;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=3;" edge="1" parent="1" source="api" target="chunking">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_chunk_token" value="" style="endArrow=classic;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=3;" edge="1" parent="1" source="chunking" target="token">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_token_index" value="" style="endArrow=classic;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=3;" edge="1" parent="1" source="token" target="index">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_index_crypto" value="new chunk" style="endArrow=classic;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=3;fontSize=14;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="index" target="crypto">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="955" y="300" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_crypto_storage" value="" style="endArrow=classic;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=3;" edge="1" parent="1" source="crypto" target="storage">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_index_pow" value="duplicate token" style="endArrow=classic;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=3;fontSize=14;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="index" target="pow">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_api_telemetry" value="request logs" style="endArrow=classic;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=3;fontSize=14;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="api" target="telemetry">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_telemetry_features" value="" style="endArrow=classic;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=3;" edge="1" parent="1" source="telemetry" target="features">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="430" y="782" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_features_detector" value="" style="endArrow=classic;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=3;" edge="1" parent="1" source="features" target="detector">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_models_detector" value="" style="endArrow=classic;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=3;" edge="1" parent="1" source="models" target="detector">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_detector_pow" value="risk r" style="endArrow=classic;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=3;fontSize=14;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="detector" target="pow">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1230" y="785" />
+              <mxPoint x="1230" y="375" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_detector_policy" value="policy input r" style="endArrow=classic;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=3;fontSize=14;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="detector" target="policy">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1490" y="820" />
+              <mxPoint x="1490" y="375" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_detector_reputation" value="risk / label" style="endArrow=classic;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=3;fontSize=14;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="detector" target="reputation">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1240" y="740" />
+              <mxPoint x="1240" y="198" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_reputation_cache" value="" style="endArrow=classic;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=3;" edge="1" parent="1" source="reputation" target="cache">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_pow_policy" value="" style="endArrow=classic;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=3;" edge="1" parent="1" source="pow" target="policy">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_policy_cache" value="" style="endArrow=classic;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=3;" edge="1" parent="1" source="policy" target="cache">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1735" y="210" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_policy_api" value="ALLOW / RATE_LIMIT / BLOCK" style="endArrow=classic;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=3;fontSize=14;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="policy" target="api">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1755" y="590" />
+              <mxPoint x="530" y="590" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,0 +1,81 @@
+{
+  "dataset": {
+    "total_samples": 2200,
+    "normal": 1400,
+    "hash_probing": 270,
+    "ownership_fraud": 260,
+    "dedup_dos": 270,
+    "trace_windows_for_calibration": 347
+  },
+  "supervised_binary": {
+    "method": "supervised_only",
+    "precision": 0.889795918367347,
+    "recall": 0.9083333333333333,
+    "f1": 0.8989690721649485,
+    "auroc": 0.9790823412698413,
+    "pr_auc": 0.9686398606948863,
+    "tn": 393,
+    "fp": 27,
+    "fn": 22,
+    "tp": 218
+  },
+  "multiclass": {
+    "macro_f1": 0.8924420426065163,
+    "per_class": [
+      {
+        "label": "normal",
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      {
+        "label": "hash_probing",
+        "precision": 0.8505747126436781,
+        "recall": 0.9135802469135802,
+        "f1": 0.8809523809523809
+      },
+      {
+        "label": "ownership_fraud",
+        "precision": 0.7972972972972973,
+        "recall": 0.7564102564102564,
+        "f1": 0.7763157894736842
+      },
+      {
+        "label": "dedup_dos",
+        "precision": 0.9240506329113924,
+        "recall": 0.9012345679012346,
+        "f1": 0.9125
+      }
+    ]
+  },
+  "cold_start_unsupervised": {
+    "method": "ocsvm_cold_start",
+    "precision": 0.7042682926829268,
+    "recall": 0.9625,
+    "f1": 0.8133802816901409,
+    "auroc": 0.9597718253968255,
+    "pr_auc": 0.9190852424441885,
+    "tn": 323,
+    "fp": 97,
+    "fn": 9,
+    "tp": 231
+  },
+  "pow": {
+    "static_proof_length_bytes": 32.0,
+    "adaptive_mean_proof_length_all": 71.84681818181818,
+    "adaptive_mean_proof_length_benign": 49.57785714285714,
+    "adaptive_mean_proof_length_attack": 110.8175,
+    "baseline_attacker_success": 0.8646648458291916,
+    "adaptive_attacker_success": 0.47132171947052726,
+    "relative_reduction_percent": 45.490819738537915,
+    "benign_overhead_percent": 54.93080357142857,
+    "difficulty_tiers": {
+      "static": 1,
+      "elevated": 259,
+      "hardened": 540,
+      "severe": 0
+    },
+    "risk_mean_benign": 0.159657340671609,
+    "risk_mean_attack": 0.7164392035165895
+  }
+}
