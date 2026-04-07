@@ -1,0 +1,1411 @@
+%% =========================================================
+%%  Team 44 — Secure Cloud Deduplication Framework
+%%  A SECURE CLOUD DEDUPLICATION FRAMEWORK WITH
+%%  BEHAVIOURAL MONITORING
+%%  Anna University BE Project Report — May 2026
+%% =========================================================
+\documentclass[12pt,a4paper,oneside]{report}
+
+%% ---- Packages ----
+\usepackage[a4paper, top=25mm, bottom=25mm, left=30mm, right=20mm]{geometry}
+\usepackage{times}
+\usepackage{setspace}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{amsmath,amssymb}
+\usepackage{mathtools}
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{tocloft}
+\usepackage{enumitem}
+\usepackage{float}
+
+%% ---- Spacing ----
+\onehalfspacing
+
+%% ---- Chapter title format ----
+\titleformat{\chapter}[display]
+  {\normalfont\Large\bfseries\centering}
+  {CHAPTER \thechapter}{10pt}{\Large\MakeUppercase}
+\titlespacing*{\chapter}{0pt}{-20pt}{20pt}
+
+%% ---- Section format ----
+\titleformat{\section}{\normalfont\large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\normalfont\normalsize\bfseries}{\thesubsection}{1em}{}
+
+%% ---- Header/footer ----
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[R]{\small Madras Institute of Technology, Anna University}
+\fancyhead[L]{\small Secure Cloud Deduplication Framework}
+\fancyfoot[C]{\thepage}
+
+%% ---- Hyperref ----
+\hypersetup{colorlinks=true,linkcolor=black,citecolor=black,urlcolor=blue}
+
+%% ---- Algorithm style ----
+\algrenewcommand\algorithmicprocedure{\textbf{procedure}}
+\algrenewcommand\algorithmicfunction{\textbf{function}}
+\newcommand{\algorithmicbreak}{\textbf{break}}
+\newcommand{\Break}{\State \algorithmicbreak}
+
+%% ---- Custom column types ----
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+\newcolumntype{R}[1]{>{\raggedleft\arraybackslash}p{#1}}
+
+%% ---- Math macros ----
+\newcommand{\KS}{K_{\mathrm{server}}}
+\newcommand{\KM}{K_M}
+\newcommand{\KU}{K_U}
+\newcommand{\Kchunk}{K_{\mathrm{chunk}}}
+\newcommand{\Ti}{T_i}
+\newcommand{\Ci}{C_i}
+\newcommand{\rho}{\varrho}     % reputation
+\newcommand{\HMAC}{\mathrm{HMAC\text{-}SHA256}}
+\newcommand{\HKDF}{\mathrm{HKDF\text{-}SHA256}}
+\newcommand{\AESGCM}{\mathrm{AES\text{-}256\text{-}GCM}}
+
+%% =========================================================
+\begin{document}
+\pagenumbering{roman}
+
+%% =========================================================
+%% TITLE PAGE
+%% =========================================================
+\begin{titlepage}
+\begin{center}
+{\Large\bfseries A SECURE CLOUD DEDUPLICATION FRAMEWORK\\[6pt]
+WITH BEHAVIOURAL MONITORING}\\[12pt]
+{\large\bfseries A PROJECT REPORT}\\[8pt]
+{\itshape Submitted by}\\[10pt]
+{\large\bfseries SHRUTHIKAA.~S \quad (2022503555)}\\[4pt]
+{\large\bfseries LAHARI.~V \quad (2022503559)}\\[4pt]
+{\large\bfseries AJAY.~C.~S \quad (2022503557)}\\[12pt]
+{\normalsize in partial fulfilment for the award of the degree of}\\[6pt]
+{\large\bfseries BACHELOR OF ENGINEERING}\\[4pt]
+{\normalsize IN}\\[4pt]
+{\large\bfseries COMPUTER SCIENCE ENGINEERING}\\[18pt]
+\includegraphics[width=5cm]{mit_logo}\\[10pt]   %% Replace mit_logo with your logo file
+{\large\bfseries MADRAS INSTITUTE OF TECHNOLOGY, CHENNAI}\\[4pt]
+{\normalsize ANNA UNIVERSITY: CHENNAI 600~025}\\[8pt]
+{\normalsize MAY 2026}
+\end{center}
+\end{titlepage}
+
+%% =========================================================
+%% BONAFIDE CERTIFICATE
+%% =========================================================
+\chapter*{BONAFIDE CERTIFICATE}
+\addcontentsline{toc}{chapter}{Bonafide Certificate}
+
+\noindent Certified that this project report \textbf{``A SECURE CLOUD DEDUPLICATION FRAMEWORK WITH BEHAVIOURAL MONITORING''} is the bonafide work of \textbf{``SHRUTHIKAA.~S (2022503555), LAHARI.~V (2022503559), and AJAY.~C.~S (2022503557)''} who carried out the project work under my supervision.
+
+\vspace{40pt}
+\begin{tabular}{p{0.45\textwidth}p{0.45\textwidth}}
+\textbf{SIGNATURE} & \textbf{SIGNATURE} \\[30pt]
+\textbf{Dr.~R.~K.~Ponsy Sathiabama} & \textbf{Dr.~Kathiroli~R} \\
+\textbf{HEAD OF THE DEPARTMENT} & \textbf{SUPERVISOR} \\
+Department of Computer Technology & Assistant Professor \\
+Madras Institute of Technology & Department of Computer Technology \\
+Anna University, Chennai -- 600~044 & Madras Institute of Technology \\
+& Anna University, Chennai -- 600~044
+\end{tabular}
+
+%% =========================================================
+%% ABSTRACT
+%% =========================================================
+\chapter*{ABSTRACT}
+\addcontentsline{toc}{chapter}{Abstract}
+
+Cloud storage systems rely on data deduplication to reduce storage costs, but chunk-level deduplication introduces security vulnerabilities including hash probing, ownership fraud, deduplication denial-of-service, and timing side-channels.
+Existing defences treat these threats in isolation and therefore do not provide a deployable view of how confidentiality, ownership verification, behavioural screening, and operational efficiency can be combined within a single secure deduplication pipeline.
+
+This project therefore proposes a \textit{Secure Cloud Deduplication Framework with Behavioural Monitoring}, designed as an integrated architecture rather than a collection of independent countermeasures.
+The framework extends the REFA baseline (Wu et al., 2024) with HMAC-SHA256 secret-assisted token generation, a real Ristretto255 oblivious pseudorandom function (OPRF) for MLE key derivation, HKDF-AES-256-GCM per-chunk encryption, adaptive Proof-of-Ownership (PoW) challenge calibration, and a dual-mode detection engine comprising a supervised Random Forest classifier and a cold-start anomaly path.
+At the data plane, secure token generation and per-chunk key derivation preserve deduplication while reducing exposure to confirmation and frequency attacks.
+At the control plane, request telemetry is transformed into behavioural features that guide anomaly scoring, policy selection, and reputation updates in real time.
+
+The supervised module achieves PR-AUC of $0.9686$, $F_1$ of $0.8990$, Precision of $0.8898$, Recall of $0.9083$, and Multiclass Macro-$F_1$ of $0.8924$ across four behavioural classes on a 2200-window simulated stress-test dataset.
+The cold-start unsupervised module achieves PR-AUC of $0.9191$, Precision of $0.7043$, Recall of $0.9625$, and $F_1$ of $0.8134$ at its selected operating point.
+Under a fixed-budget solver model, the Adaptive PoW mechanism reduces estimated attacker success from $0.8647$ to $0.4713$ ($45.49\%$ relative reduction), while the storage layer maintains $65$--$80\%$ reduction with $O(1)$ lookup at 50\,000 chunks per second.
+
+Evaluation is reported using a hybrid methodology: prototype measurements are used for latency and storage behaviour, while 2200 simulated behavioural sessions are calibrated against 347 Azure trace-derived benign windows and labelled using rule-derived attack heuristics.
+Accordingly, the behavioural results should be interpreted as controlled stress-test outcomes rather than field-measured adversarial ground truth.
+Even with that limitation, the study shows that secure deduplication, adaptive control, and runtime behavioural monitoring can be combined into a coherent thesis-scale prototype with defensible performance characteristics.
+
+\vspace{6pt}
+\noindent\textbf{Keywords:} cloud deduplication, proof-of-ownership, HMAC-SHA256, Ristretto255 OPRF, behavioural anomaly detection, adaptive PoW, random forest, isolation forest.
+
+%% =========================================================
+%% ACKNOWLEDGEMENTS
+%% =========================================================
+\chapter*{ACKNOWLEDGEMENTS}
+\addcontentsline{toc}{chapter}{Acknowledgements}
+
+We take this opportunity to thank \textbf{Prof.~Dr.~Jayashree~P}, Respected Dean, MIT Campus, Anna University, and \textbf{Dr.~R.~K.~Ponsy Sathiabama}, respected Head of the Department, Department of Computer Technology, for providing the facilities and academic environment necessary for this project.
+
+We express our sincere gratitude to our supervisor \textbf{Dr.~Kathiroli~R}, Assistant Professor, Department of Computer Technology, MIT, Anna University, whose guidance, encouragement, and direction were central to the successful completion of this work.
+
+We acknowledge the efforts and feedback of \textbf{Dr.~Chitra~S}, Associate Professor, \textbf{Dr.~Pabitha~P}, Associate Professor, and \textbf{Dr.~Jayachitra~V~P}, Assistant Professor, whose review comments and suggestions helped improve the quality of the project.
+
+We thank all the teaching and non-teaching members of the Department of Computer Technology, MIT, Anna University, whose support, either directly or indirectly, contributed to the smooth completion of this Final Year Project.
+
+\vspace{20pt}
+\begin{flushright}
+SHRUTHIKAA~S (2022503555) \\
+LAHARI~V (2022503559) \\
+AJAY~C~S (2022503557)
+\end{flushright}
+
+%% =========================================================
+%% TABLE OF CONTENTS
+%% =========================================================
+\tableofcontents
+\listoftables
+\listoffigures
+
+%% =========================================================
+%% LIST OF SYMBOLS
+%% =========================================================
+\chapter*{List of Symbols, Abbreviations and Nomenclature}
+\addcontentsline{toc}{chapter}{List of Symbols, Abbreviations and Nomenclature}
+
+\begin{longtable}{L{3cm}L{11cm}}
+\toprule
+\textbf{Symbol / Abbreviation} & \textbf{Description} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+AES        & Advanced Encryption Standard \\
+AUC        & Area Under the Curve \\
+AWS        & Amazon Web Services \\
+DoS        & Denial-of-Service \\
+$F_1$      & F1-Score (Harmonic Mean of Precision and Recall) \\
+FastCDC    & Fast Content-Defined Chunking \\
+FN         & False Negative \\
+FP         & False Positive \\
+HKDF       & HMAC-based Key Derivation Function \\
+HMAC       & Hash-based Message Authentication Code \\
+HTTP       & Hypertext Transfer Protocol \\
+IF         & Isolation Forest \\
+MLE        & Message-Locked Encryption \\
+OCSVM      & One-Class Support Vector Machine \\
+OPRF       & Oblivious Pseudorandom Function \\
+PoW        & Proof-of-Ownership \\
+PR-AUC     & Precision-Recall Area Under the Curve \\
+REFA       & Randomized Encryption deduplication against Frequency Attack (Wu et al., 2024) \\
+Redis      & Remote Dictionary Server \\
+RF         & Random Forest \\
+S3         & Simple Storage Service (Amazon) \\
+SHA-256    & Secure Hash Algorithm, 256-bit output \\
+SRR        & Storage Reduction Ratio \\
+TN         & True Negative \\
+TP         & True Positive \\
+\midrule
+$C_i$      & $i$-th chunk of a file \\
+$d$        & Adaptive PoW difficulty score, $d \in [0,1]$ \\
+$K_M$      & MLE key for encrypting chunk $C_i$ \\
+$K_U$      & User ownership key derived via Argon2id \\
+$L$        & PoW challenge length (bytes) \\
+$r$        & Client risk score, $r \in [0,1]$ \\
+$s_{\mathrm{OCSVM}}(\mathbf{x})$ & Unsigned anomaly score assigned by the One-Class SVM to feature vector $\mathbf{x}$ \\
+$T_i$      & HMAC-SHA256 secret-assisted dedup token for chunk $i$ \\
+$\tau_{\mathrm{OCSVM}}$ & Threshold derived from the benign reference score distribution for the cold-start detector \\
+$\varrho$  & Client reputation score, $\varrho \in [0,1]$ \\
+$\delta$   & Duplicate request pressure, $\delta \in [0,1]$ \\
+\end{longtable}
+
+%% =========================================================
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+%% =========================================================
+%% CHAPTER 1 — INTRODUCTION
+%% =========================================================
+\chapter{INTRODUCTION}
+
+\section{Introduction}
+
+The proliferation of cloud computing has fundamentally transformed how organisations store and manage data.
+Data deduplication has emerged as one of the most effective strategies to optimise storage infrastructure, eliminating redundant data blocks to achieve storage savings of $50$--$80\%$ on typical workloads.
+Systems such as Amazon~S3, Dropbox, and enterprise backup solutions rely on chunk-level deduplication, wherein files are segmented into fixed or variable-size chunks and each chunk is identified by a cryptographic fingerprint.
+
+In a typical cloud deduplication workflow, a client application segments a file into chunks, computes a cryptographic hash for each chunk, and queries the server to determine whether the chunk already exists.
+If the chunk is present, the server increments a reference counter and skips the upload; if absent, the client uploads it and the server records its fingerprint in a deduplication index.
+This mechanism significantly reduces both storage consumption and upload bandwidth.
+
+\section{Need for Secure Cloud Deduplication}
+
+Although deduplication is attractive from an infrastructure perspective, its security implications become more severe when duplicate decisions are exposed during the upload path.
+In practical cloud deduplication systems, the server effectively reveals whether content is already present by responding differently to duplicate and non-duplicate requests.
+As a result, the deduplication interface becomes more than a storage optimisation mechanism: it becomes a security-sensitive protocol surface through which an adversary may infer information about stored content, attempt false ownership claims, or repeatedly stress verification resources.
+
+This concern is amplified in cloud settings for three reasons.
+First, multi-tenant storage introduces cross-user visibility risks, because duplicate existence checks can unintentionally leak information about data belonging to other users.
+Second, cloud systems operate at a scale where automated probing and repeated request abuse are practical for attackers.
+Third, modern storage services must balance security with performance, meaning that any practical defence must preserve the efficiency advantages of deduplication rather than disabling them entirely.
+For these reasons, secure deduplication should be treated as a joint systems, cryptographic, and behavioural problem rather than as a storage problem alone.
+
+\section{Threat Landscape}
+
+The threat model considered in this thesis focuses on adversaries who can interact with the upload interface as seemingly legitimate clients but attempt to misuse the deduplication protocol for inference or abuse.
+Such adversaries need not break encryption directly.
+Instead, they exploit protocol feedback, repeated querying, timing differences, or weak ownership validation to obtain information or consume service resources.
+This is an important distinction because the security weakness does not arise solely from poor cryptography; it also emerges from how the deduplication workflow is exposed operationally.
+
+The present work therefore studies four representative attack categories: hash probing, side-channel inference, ownership fraud, and deduplication denial-of-service.
+These attacks differ in mechanism, but they share a common property: each targets the request-handling logic around duplicate detection rather than the stored ciphertext alone.
+Consequently, a complete defence must combine hidden token generation, stronger ownership verification, adaptive control, and request-level behavioural monitoring.
+
+\section{Problem Statement}
+
+Traditional deduplication systems prioritise storage efficiency and treat security as a secondary concern.
+Because the server's response to a hash query implicitly reveals whether the corresponding chunk is already stored, the protocol creates a side-channel through which adversaries can probe the system.
+Four well-documented attack classes arise:
+
+\begin{itemize}
+  \item \textbf{Hash Probing Attack:} An adversary systematically queries the server with hashes of known or suspected files to infer whether those files are stored, building a map of stored content without requiring access credentials.
+  \item \textbf{Side-Channel Attack:} By measuring timing differences between server responses for known-duplicate versus known-unique hash queries, an attacker can deduce whether specific content exists.
+  \item \textbf{Ownership Fraud:} An adversary who obtains the hash of a file can claim ownership and gain a reference to it without ever possessing the actual data, bypassing access controls that rely solely on hash-based verification.
+  \item \textbf{Deduplication DoS:} By flooding the server with large numbers of duplicate hash claims, an attacker exhausts server-side processing resources and disrupts service for legitimate users.
+\end{itemize}
+
+Conventional defences such as network-level IDS and static Proof-of-Ownership protocols address some of these threats but are insufficient in isolation.
+Static PoW schemes impose uniform verification overhead regardless of client risk profile, and no existing system applies runtime behavioural monitoring to the deduplication request layer.
+
+\section{Research Motivation}
+
+The literature shows substantial progress in individual components of secure storage, including encrypted deduplication, proof-of-ownership schemes, and adaptive access control.
+However, these contributions are usually evaluated independently.
+As a result, there remains a gap between theoretical protection mechanisms and an end-to-end deployable workflow suitable for a thesis-scale prototype.
+In particular, there is limited work showing how cryptographic token secrecy, duplicate gating, risk-aware control, and behavioural telemetry can be integrated into a single cloud deduplication system without destroying the storage benefits that motivate deduplication in the first place.
+
+This project is motivated by that gap.
+The thesis does not attempt to propose an entirely new storage paradigm; rather, it aims to show that a practical and security-aware deduplication architecture can be constructed by combining existing ideas into a coherent system.
+The resulting framework is intended to be evaluated not only on whether it blocks specific attacks, but also on whether it retains acceptable throughput, storage reduction, and operational interpretability.
+
+\section{Objectives}
+
+The specific objectives of this project are:
+
+\begin{enumerate}
+  \item To analyse security vulnerabilities specific to cloud data deduplication systems and characterise the corresponding attack models.
+  \item To implement HMAC-SHA256 secret-assisted token generation and HKDF-AES-256-GCM chunk encryption to prevent frequency and confirmation attacks, addressing the external key-server dependency of REFA.
+  \item To upgrade the OPRF backend from a simulated HMAC construction to a real Ristretto255 blind-evaluate-unblind path (via rbcl/libsodium), aligning the key derivation protocol with DupLESS-style security assumptions under the CDH assumption in a prime-order group.
+  \item To design a telemetry and feature extraction pipeline that captures twelve request-level behavioural signals per client session in real time.
+  \item To develop a supervised Random Forest detection module capable of multiclass attack classification with high precision under simulated stress-test evaluation.
+  \item To develop an unsupervised anomaly detection module for cold-start and zero-day attack scenarios using one-class and statistical detectors.
+  \item To implement an Adaptive PoW mechanism that calibrates challenge difficulty dynamically based on client risk scores and reputation history.
+  \item To evaluate the integrated framework using real prototype measurements for storage and latency, together with a hybrid trace-aligned behavioural stress test anchored to Azure cloud invocation traces.
+\end{enumerate}
+
+\section{Scope and Limitations}
+
+The scope of this thesis is restricted to a cloud deduplication setting in which files are chunked before upload, duplicate existence is checked through server-side token lookup, and chunk confidentiality is preserved using message-locked style key derivation and authenticated encryption.
+The work focuses specifically on four classes of abuse relevant to this setting: hash probing, timing-assisted duplicate inference, ownership fraud, and duplicate-request denial-of-service.
+The implementation scope includes a prototype upload service, secure token derivation, adaptive Proof-of-Ownership, telemetry collection, and behavioural monitoring over request-level features.
+
+Several boundaries are intentionally maintained.
+The thesis does not attempt to model hardware side-channel attacks, compromised server administrators, or fully distributed multi-cloud consensus protocols.
+Similarly, the behavioural experiments do not claim to represent ground-truth attacker traffic captured in production; instead, they use calibrated synthetic stress testing anchored to public cloud traces.
+These limitations are stated explicitly so that the contributions of the work are interpreted correctly: as a deployable prototype and evaluated framework for secure deduplication with behavioural monitoring, rather than as a complete solution to every threat affecting cloud storage.
+
+\section{Organisation of the Thesis}
+
+The remainder of this thesis is organised as follows.
+Chapter~2 reviews the literature on secure deduplication, ownership verification, encrypted storage, and behavioural monitoring, and identifies the design gap addressed by the proposed system.
+Chapter~3 presents the methodology, including the overall architecture, the responsibilities of each module, and the end-to-end data flow through the secure upload pipeline.
+Chapter~4 describes the implementation of the prototype, the software and hardware platform, the experimental setup, the behavioural dataset construction process, and the major implementation choices in the cryptographic and detection subsystems.
+Chapter~5 presents the experimental results and discusses them from the perspectives of detection quality, adaptive PoW behaviour, storage efficiency, and trace-aligned behavioural evaluation.
+Finally, Chapter~6 concludes the thesis by summarising the major contributions and outlining directions for future work.
+
+%% =========================================================
+%% CHAPTER 2 — LITERATURE REVIEW
+%% =========================================================
+\chapter{LITERATURE REVIEW}
+
+\section{Introduction to Secure Deduplication Research}
+
+Data deduplication security has been an active research area since Harnik et al.\ (2010) formalised the side-channel threat inherent in hash-based deduplication protocols.
+Early work concentrated on cryptographic defences: convergent encryption schemes that allow deduplication of independently encrypted data, server-aided proofs-of-ownership that bind hash-based access to data possession, and blind challenge-response protocols that avoid exposing plaintext to the server.
+Over time, the literature has evolved from viewing deduplication as a purely storage-oriented optimisation to treating it as a protocol with its own threat surface.
+This shift is significant because it changes the design objective.
+The goal is no longer simply to reduce storage consumption while encrypting data, but to do so in a way that does not leak meaningful information through duplicate checks, challenge responses, or user interaction patterns.
+
+The reviewed literature can therefore be grouped into four broad streams.
+The first concerns cryptographic foundations such as message-locked encryption and server-aided key derivation.
+The second focuses on Proof-of-Ownership and related challenge-response schemes.
+The third explores broader secure deduplication architectures with access control, integrity, or rate-aware protection.
+The fourth, which remains comparatively underdeveloped in this domain, concerns runtime behavioural monitoring and anomaly detection over deduplication request streams.
+
+\section{Foundational Cryptographic Work}
+
+\subsection{Message-Locked Encryption and Convergent Encryption}
+
+Foundational work on secure deduplication is closely tied to message-locked encryption (MLE), in which the encryption key is derived from the message itself or from a deterministic function of the message.
+This idea enables identical plaintexts to produce comparable cryptographic identifiers, which is essential for deduplication across users.
+At the same time, it introduces an inherent tension: the more directly the key or ciphertext reflects the plaintext, the more exposed the system becomes to confirmation attacks, frequency leakage, and dictionary-style inference.
+
+Early convergent encryption approaches demonstrated that deduplication and encryption need not be mutually exclusive, but they also exposed the limits of plain deterministic hashing as a security boundary.
+If a chunk identifier can be recomputed by an outsider, then duplicate detection itself becomes an oracle about the presence of data.
+This insight motivates the later move toward secret-assisted constructions and blind server-aided derivation.
+
+\subsection{Server-Aided Key Derivation and OPRF-Based Approaches}
+
+Server-aided encrypted deduplication schemes attempt to reduce the exposure of deterministic message-derived keys by introducing a keyed or blind evaluation component.
+In these systems, the client does not derive the final MLE key from the plaintext alone; instead, a server or key service participates in the derivation through a secret-assisted transformation, often framed as an oblivious pseudorandom function.
+This direction is important because it prevents an adversary from reproducing deduplication identifiers offline without access to server-held secret material.
+
+However, these gains often come at the cost of additional protocol complexity.
+External key servers create new trust and availability dependencies, blind evaluation protocols introduce extra rounds or group operations, and practical implementations may substitute a simulated keyed hash for a full cryptographic OPRF.
+The present thesis follows this research direction but aims to internalise the design in a way that removes unnecessary external dependencies while still preserving the security rationale of blind or secret-assisted derivation.
+
+\section{Proof-of-Ownership Mechanisms}
+
+Proof-of-Ownership schemes were proposed to address one of the most important weaknesses of hash-based deduplication: the ability of a client to claim possession of a file merely by presenting its fingerprint.
+Instead of granting duplicate reuse based solely on hash equality, PoW protocols require a client to answer a challenge derived from the underlying content, thereby providing evidence that the user actually possesses the file or chunk in question.
+
+The literature demonstrates that PoW is an essential complement to encrypted deduplication, but not a complete solution by itself.
+Static PoW schemes impose the same challenge burden on all clients regardless of behavioural context, which can unnecessarily penalise benign users while under-reacting to suspicious activity bursts.
+In addition, many PoW proposals are analysed primarily from a cryptographic soundness perspective, with less attention paid to how challenge cost, user reputation, or repeated duplicate pressure should influence enforcement in a live system.
+This limitation directly motivates the adaptive PoW component of the proposed framework.
+
+Prajapati and Shah~\cite{prajapati2022} surveyed secure cloud deduplication techniques and threat models, establishing a taxonomy of attack vectors including hash probing, ownership fraud, and deduplication denial-of-service.
+Ma et al.~\cite{ma2022} proposed a hybrid-cloud encrypted deduplication scheme with dynamic ownership verification, demonstrating that ownership lifecycle management can be integrated with deduplication without significant throughput degradation.
+Lee and Seo~\cite{lee2023} extended dynamic ownership management to general cloud storage settings, achieving improved storage efficiency while maintaining data confidentiality; the work does not consider adaptive rate control or runtime risk scoring.
+Ha et al.~\cite{ha2023} proposed a client-side deduplication scheme based on updatable server-aided encryption with integrated Proof-of-Ownership verification; the scheme requires a dedicated external key server and provides no mechanism for detecting anomalous client behaviour.
+
+\section{Recent Integrated Secure Deduplication Approaches}
+
+Wu et al.~\cite{wu2023lightweight} designed a lightweight encrypted deduplication scheme for backup workloads, reducing computational overhead through simplified key management.
+Wu et al.~\cite{wu2024refa} proposed REFA, a randomized encryption deduplication method against frequency attack, published in the \textit{Journal of Information Security and Applications} (Vol.~83, Art.~no.~103774).
+REFA introduced per-client reputation scoring and a frequency-aware PoW difficulty function.
+The scheme relies on a blind GDH-based token construction requiring an external key server, applies only static rate-limiting thresholds, and does not incorporate machine-learning-based anomaly detection.
+
+Jiang et al.~\cite{jiang2023} extended secure deduplication to near-duplicate content using fuzzy hashing, improving deduplication ratios for multimedia workloads at the cost of increased indexing complexity.
+Song et al.~\cite{song2024} proposed LSDedup, a layered encryption architecture that partitions chunks into tiers based on access frequency.
+The auditing strand is represented by Zheng et al.~\cite{zheng2025}, Peng et al.~\cite{peng2025}, and Hua et al.~\cite{hua2025}, who integrate data integrity auditing and multi-replica verification with deduplication systems.
+Li et al.~\cite{li2020} proposed TED (Tunable Encrypted Deduplication), which balances storage efficiency against confidentiality by encrypting high-frequency chunks into multiple ciphertexts.
+Gan et al.~\cite{gan2025} proposed ECDedup, a decentralised server-aided encrypted deduplication scheme with secret sharing, achieving improved throughput while strengthening token secrecy.
+Tang et al.~\cite{tang2024} proposed a hybrid-cloud deduplication scheme with OPRF-assisted convergent key generation and access control, supporting the secret-assisted key derivation direction adopted in this project.
+
+These more recent systems demonstrate that the research community has already moved beyond basic encrypted deduplication toward richer architectures involving access control, ownership management, or stronger token secrecy.
+Nevertheless, most of them still focus on cryptographic protocol design as the primary defence layer.
+They improve confidentiality and ownership validation, but they do not generally model runtime behavioural abuse as a first-class signal in the request path.
+As a result, they remain less suited to environments in which attacks are visible not only through incorrect cryptographic claims, but also through abnormal usage patterns over time.
+
+\section{Behavioural Detection and Anomaly Monitoring}
+
+Gao et al.~\cite{gao2024} applied similarity-based secure deduplication to IIoT cloud management; the scheme is domain-specific.
+Guan et al.~\cite{guan2025} studied deduplication of AI/ML model parameters under differential privacy constraints.
+Tarun et al.~\cite{tarun2025} proposed an adaptive deduplication framework based on quantum immune algorithms for policy optimisation, focusing on storage efficiency rather than security.
+Goel and Prabha~\cite{goel2025} reviewed current deduplication strategies in cloud environments, highlighting the lack of integrated security monitoring as an open problem.
+
+Outside the deduplication literature, anomaly detection over request streams is a mature topic in intrusion detection, fraud screening, and operations monitoring.
+Supervised classifiers can identify known misuse patterns when labelled training data exist, while unsupervised detectors can provide a cold-start path for previously unseen or weakly labelled behaviour.
+However, the application of these ideas to the deduplication request layer remains limited.
+In particular, there is little prior work combining cryptographic deduplication protection with a behavioural model that directly influences duplicate gating, PoW difficulty, and policy enforcement.
+
+\section{Comparative Gap Identification}
+
+Across the surveyed works, several limitations recur consistently.
+Token generation schemes that depend on external key servers introduce single points of failure and significant protocol complexity.
+PoW-based ownership verification is typically static.
+Runtime behavioural monitoring through machine learning has not been applied to the deduplication request layer in any of the surveyed works.
+No existing system provides a unified framework that integrates a real blind OPRF, per-chunk key derivation, adaptive multi-input PoW calibration, and real-time anomaly detection within a single deployable architecture.
+
+The proposed work is positioned at this gap.
+It does not claim to replace the cryptographic insights of prior work; rather, it builds on them and extends them into a systems-level architecture.
+Its contribution lies in combining a secret-assisted deduplication path, real blind OPRF-backed key derivation, adaptive duplicate verification, and a two-mode behavioural monitoring layer within a single prototype that can be evaluated as a complete request-processing framework.
+
+%% =========================================================
+%% CHAPTER 3 — METHODOLOGY
+%% =========================================================
+\chapter{METHODOLOGY}
+
+\section{System Architecture}
+
+The proposed framework is decomposed into four major modules that interact through well-defined interfaces:
+the \textit{Interface Module}, the \textit{Core Deduplication Module}, the \textit{Security and Control Module}, and the \textit{Behaviour Detection Module}.
+The design prioritises separation of concerns: the storage layer handles only deduplication mechanics, while security and monitoring responsibilities are handled by dedicated modules with clearly defined inputs, outputs, and feedback channels.
+Such decomposition is important in a thesis setting because it allows each subsystem to be reasoned about independently while still preserving an end-to-end account of the upload lifecycle.
+
+The framework directly addresses the limitations of REFA~\cite{wu2024refa} by:
+(i)~eliminating the external key server dependency through a server-local HMAC-SHA256 construction, backed by a Ristretto255 OPRF for MLE key derivation;
+(ii)~introducing adaptive multi-input PoW difficulty calibration;
+and (iii)~adding a runtime machine learning detection layer.
+Architecturally, the system behaves as a closed-loop control pipeline.
+Requests enter through the interface layer, are processed by the core deduplication path, observed by the behavioural detection layer, and finally acted upon by the security and control layer through policy updates, reputation changes, and adaptive challenge calibration.
+This organisation ensures that detection outcomes are not merely logged for offline inspection, but are fed back into the live request-handling path.
+Figure~\ref{fig:arch} illustrates the overall system architecture.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.95\textwidth]{fig_architecture}   %% fig_architecture.png
+  \caption{System Architecture of the Proposed Secure Cloud Deduplication Framework with Behavioural Monitoring}
+  \label{fig:arch}
+\end{figure}
+
+The implementation-oriented procedures corresponding to upload handling, duplicate verification, and behavioural scoring are presented in Chapter~4 so that the formal logic appears alongside the concrete implementation details.
+
+\section{Module-Wise Methodology}
+
+This section explains the methodology of the proposed framework at the level of its major modules.
+The purpose of this decomposition is to make the end-to-end design easier to reason about.
+Rather than viewing the system as a single monolithic upload service, the thesis treats it as a coordinated collection of subsystems, each with a clearly defined role in the secure deduplication pipeline.
+This modular view also supports evaluation, because each module contributes a distinct property: the interface layer governs interaction, the core deduplication layer governs storage efficiency, the security and control layer governs adaptive response, and the behaviour detection layer governs runtime monitoring.
+
+\section{Interface Module}
+
+The Interface Module serves as the single-entry point for all client interactions, exposing a RESTful API built on FastAPI with three primary endpoints:
+\texttt{/upload} for file ingestion with deduplication and PoW verification;
+\texttt{/pow/challenge} for retrieving an adaptive PoW challenge for a duplicate chunk;
+and \texttt{/pow/verify} for submitting and verifying a PoW response.
+All requests are authenticated using per-client API keys validated on every request.
+From a systems perspective, the interface layer does more than simply route HTTP requests: it normalises request semantics, enforces the first layer of policy checks, and ensures that operational metadata is captured in a form suitable for downstream analysis.
+A Telemetry Logger records every request event --- timestamps, client~ID, request type, chunk counts, PoW results, and policy decisions --- to both a CSV flat file and a SQLite database for downstream feature extraction.
+This makes the interface layer the point at which security observability and storage functionality are unified, which is a key thesis contribution relative to designs that treat monitoring as an external add-on.
+In operational terms, every upload request therefore creates both a storage action and an observation record.
+This dual role is important because later behavioural decisions depend on accurate request history, not merely on point-in-time inspection.
+The interface module can thus be understood as the synchronisation point between user interaction, system enforcement, and behavioural evidence collection.
+
+\section{Core Deduplication Module}
+
+The Core Deduplication Module implements the fundamental deduplication logic across five sequential stages.
+These stages are presented explicitly so that the transformation from raw file content to protected stored chunks can be followed in a deterministic and auditable manner.
+In effect, the module acts as the system's data plane: it is responsible for chunk creation, secure identity generation, duplicate discovery, ciphertext production, and backend persistence.
+
+\textbf{Stage 1 — Chunking.}
+Each uploaded file is segmented into variable-size chunks using FastCDC (Fast Content-Defined Chunking), which applies a content-aware sliding window to determine chunk boundaries.
+Content-defined chunking is preferred over fixed-size chunking because it is robust to insertions and deletions: a small change to a file shifts only the boundary of the affected chunk rather than invalidating all subsequent chunks.
+
+\textbf{Stage 2 — Secret-Assisted Token Generation.}
+A HMAC-SHA256 token $T_i$ is computed for each chunk $C_i$ using a 256-bit server-held secret key $\KS$:
+\begin{equation}
+  T_i = \HMAC(\KS,\ C_i)
+  \label{eq:token}
+\end{equation}
+Because $T_i$ depends on $\KS$, an adversary who knows only the plaintext $C_i$ cannot compute $T_i$ without the server secret, directly defeating frequency analysis and confirmation attacks.
+
+\textbf{Stage 3 — Deduplication Index Lookup.}
+The token $T_i$ is looked up in the Redis deduplication index in $O(1)$ time.
+For new chunks, an MLE key is derived via the Ristretto255 OPRF and the ciphertext is stored.
+For duplicate chunks, an adaptive PoW challenge is issued.
+
+\textbf{Stage 4 — Storage Abstraction.}
+The Storage Adapter abstracts over AWS~S3, MinIO, and local filesystem backends.
+Chunk locators are server-private HMAC handles; public chunk tags returned to clients are opaque per-user HMAC values computed over the user identity and the server-private locator, preventing outsiders from linking upload responses to stored content.
+
+\textbf{Stage 5 — Index Maintenance.}
+The deduplication index maps each token $T_i$ to a reference count, enabling $O(1)$ duplicate detection and garbage collection when counts reach zero.
+The ciphertext rotation mechanism periodically replaces stored ciphertexts with fresh encryptions from newly uploaded clients, directly implementing the update strategy of Wu et al.~\cite{wu2024refa}.
+
+The Ristretto255 OPRF path for MLE key derivation follows the standard blind-evaluate-unblind protocol under the CDH assumption.
+The client computes $H_1(m)$ (hash-to-group), blinds the result with a random Ristretto scalar $r$: $\bar{M} = H_1(m) + g^r$; the server evaluates using its epoch scalar $k$: $(g^k,\ \bar{M}^k)$; the client unblinds: $N = \bar{M}^k + (g^k)^{-r} = H_1(m)^k$; and the MLE key is finalised:
+\begin{equation}
+  K_M = H_2\!\left(N \;\|\; \mathrm{SHA256}(m) \;\|\; \mathit{epoch}\right)
+  \label{eq:km}
+\end{equation}
+This implementation is active by default (\texttt{OPRF\_BACKEND=ristretto255}) and can be switched to the HMAC simulation for constrained environments via environment variable.
+
+From a methodological standpoint, this module is designed to preserve the core economic motivation of deduplication while preventing the token itself from becoming a public content identifier.
+That design choice explains why the framework does not rely on plaintext hashes as reusable deduplication handles.
+Instead, chunk identity is made meaningful only to the server, while chunk confidentiality is preserved through derived encryption keys and authenticated storage.
+The result is a data plane in which deduplication is retained, but its signalling surface is narrowed significantly.
+
+The concrete implementation flow for this procedure is presented in Chapter~4 together with the implementation-specific cryptographic and storage details.
+
+\section{Security and Control Module}
+
+The Security and Control Module manages the adaptive security posture through three interconnected sub-components.
+Rather than applying a fixed security policy to every client, it operates as a feedback controller that combines instantaneous model output with longer-term behavioural history.
+This distinction is important because secure deduplication systems are vulnerable not only to individual malicious requests, but also to gradual behavioural drift, repeated probing, and coordinated duplicate abuse over time.
+
+\textbf{Reputation Manager.}
+A per-client reputation score $\varrho \in [0.0, 1.0]$ decays towards a neutral value over time.
+After each upload interaction, the score is updated:
+\begin{equation}
+  \varrho \gets \varrho + \alpha(1-r) \cdot \mathbf{1}[\hat{y} = \text{normal}] - \beta \cdot \mathbf{1}[\hat{y} \neq \text{normal}]
+  \label{eq:reputation}
+\end{equation}
+where $\alpha$ and $\beta$ are reward and penalty learning rates.
+
+\textbf{Adaptive PoW Engine.}
+Receives the current risk score $r$, reputation $\varrho$, and duplicate pressure $\delta$, and computes challenge difficulty $d$:
+\begin{equation}
+  d = \mathrm{clamp}\!\left(0.65\,r + 0.25\,(1-\varrho) + 0.10\,\delta,\ 0,\ 1\right)
+  \label{eq:diff}
+\end{equation}
+
+\textbf{Policy Engine.}
+Translates the output risk score $r$ into a policy decision written to Redis:
+\begin{equation}
+  \pi =
+  \begin{cases}
+    \textsc{BLOCK}      & r \geq 0.80 \\
+    \textsc{RATE\_LIMIT} & 0.50 \leq r < 0.80 \\
+    \textsc{ALLOW}      & r < 0.50
+  \end{cases}
+  \label{eq:policy}
+\end{equation}
+
+Taken together, these three components form a feedback loop.
+The behaviour detector produces a current estimate of risk, the policy engine maps that estimate to an enforcement action, and the reputation manager accumulates the longer-term history of the client's conduct.
+The adaptive PoW engine then uses both present risk and retained history to decide how costly duplicate verification should be.
+This design is more expressive than a static threshold system because it distinguishes between an isolated suspicious request and a sustained pattern of misuse.
+
+\section{Behaviour Detection Module}
+
+The Behaviour Detection Module transforms raw request logs into a compact behavioural representation that can be consumed by both supervised and cold-start detectors.
+Instead of relying on packet-level network signatures, the detector observes the semantics of deduplication requests themselves, which is more appropriate for attacks such as probing, fraudulent ownership claims, and duplicate flooding.
+The module aggregates raw request events into twelve structured behavioural feature dimensions grouped into four categories:
+
+\begin{itemize}
+  \item \textbf{Frequency features:} requests per minute, duplicate hash ratio, PoW attempt rate, unique hash count.
+  \item \textbf{Hash-pattern features:} hash diversity score, upload-to-query ratio, cross-user hash overlap coefficient, collision rate.
+  \item \textbf{Temporal features:} inter-request time variance, burst activity score, session duration, requests per hour.
+  \item \textbf{User-behavioural features:} requests in the most recent 5-minute window, baseline deviation score.
+\end{itemize}
+
+The behavioural evaluation pipeline includes a \textit{trace alignment module} that compares synthetic session vectors against Azure trace-derived windows using Kolmogorov-Smirnov (KS) and Wasserstein distance metrics.
+This step does not attempt to claim that the synthetic benign sessions are identical to cloud production traffic; rather, it provides a principled calibration check showing where the generator tracks observed benign behaviour and where it diverges.
+Methodologically, this is important because the behavioural component of the thesis depends on synthetic stress testing.
+By including a trace alignment step, the evaluation makes an explicit effort to relate simulated benign behaviour to a real cloud-derived reference rather than presenting synthetic traffic as unconstrained or arbitrary.
+
+The implementation-specific detection and policy update procedure is presented in Chapter~4, where it is paired with the feature pipeline and model artefacts actually used in the prototype.
+
+\section{Data Flow Summary}
+
+The complete request lifecycle can be summarised as follows.
+An authenticated client submits a file through the interface module, where request metadata is logged and the current security policy is checked.
+The file is then segmented into variable-size chunks, and each chunk is converted into a server-secret deduplication token.
+These tokens are queried against the Redis deduplication index to determine whether the chunk is new or already stored.
+
+If a chunk is new, the system derives an MLE key using the Ristretto255 OPRF path, expands it into a per-chunk encryption key, encrypts the chunk, and stores the resulting ciphertext through the storage adapter.
+If a chunk is a duplicate, the system routes the request through adaptive Proof-of-Ownership verification before permitting duplicate reuse.
+In parallel with these storage operations, telemetry from the session is aggregated into behavioural features, scored by the detection module, and fed into the security and control module.
+The resulting risk score influences both immediate policy decisions and longer-term reputation updates, thereby closing the loop between observation and enforcement.
+
+%% =========================================================
+%% CHAPTER 4 — IMPLEMENTATION
+%% =========================================================
+\chapter{IMPLEMENTATION}
+
+\section{Introduction}
+
+This chapter describes the practical implementation of the proposed secure cloud deduplication framework. It presents the experimental setup, datasets used for behavioural evaluation, preprocessing and feature-construction procedures, implementation details of the cryptographic and detection modules, the tools and libraries employed, and the integration of these components into a working prototype. Unlike the methodology chapter, which focuses on architectural logic and system behaviour, this chapter emphasises how the framework was concretely realised in software and evaluated in a cloud-simulated environment.
+
+\section{Experimental Setup}
+
+The proposed framework is implemented in Python~3.12 and executed in a cloud-simulated environment that uses AWS~LocalStack for S3 emulation and Redis for the deduplication index, policy store, and reputation cache. All experiments were conducted on an ASUS ROG Strix G513RC laptop equipped with an AMD Ryzen~7~6800H processor with Radeon Graphics and 16~GB of RAM, running Microsoft Windows~11 Home Single Language (Version~10.0.26200). This experimental setup was chosen to preserve the programming model of a cloud deployment while remaining reproducible, economical, and suitable for iterative academic experimentation.
+
+The default OPRF backend was upgraded from an HMAC-based simulation to a real Ristretto255 implementation via the \texttt{rbcl} package, which provides libsodium bindings. This change ensures that the cryptographic design presented in the thesis is aligned with the behaviour of the implemented prototype, particularly in the key-derivation path used for secure deduplication. The implementation is further supported by a test suite comprising 46 passing tests across cryptographic, behavioural, cloud, and integration layers, thereby providing a baseline level of confidence in correctness before the system-level evaluation reported in Chapter~5.
+
+\begin{table}[H]
+\centering
+\caption{Experimental Tools and Platforms}
+\label{tab:tools}
+\begin{tabularx}{\textwidth}{L{4cm}X}
+\toprule
+\textbf{Category} & \textbf{Tools / Platforms} \\
+\midrule
+Programming Language & Python 3.12 \\
+Web Framework        & FastAPI, Uvicorn \\
+ML Frameworks        & Scikit-learn (Random Forest, Isolation Forest, One-Class SVM); TensorFlow/Keras (LSTM, Autoencoder) \\
+OPRF Backend         & Ristretto255 via rbcl (libsodium); HMAC fallback via \texttt{OPRF\_BACKEND=hmac} \\
+Deduplication        & Custom FastCDC with HMAC-SHA256 secret-assisted token generation \\
+Encryption           & hashlib (HMAC-SHA256, SHA-256); PyCryptodome (AES-256-GCM); cryptography (HKDF-SHA256) \\
+Storage Backend      & Redis (dedup index, policy/reputation cache); AWS S3 via LocalStack \\
+Data Processing      & NumPy, Pandas, SciPy (KS test, Wasserstein distance) \\
+Database             & SQLite (telemetry); Redis (reputation/policy cache) \\
+Development/Testing  & Google Colab, Jupyter Notebook, VS Code, Swagger UI, pytest (46 tests) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Datasets Used}
+
+The implementation and evaluation of the proposed framework rely on two complementary categories of data: prototype-generated operational data and a structured behavioural evaluation dataset. This separation is important because not all aspects of the framework can be studied through the same evidence source. Storage behaviour, deduplication performance, encryption overhead, and Proof-of-Ownership latency are measured directly from the running prototype, whereas behavioural detection quality is evaluated using a controlled stress-test dataset designed to exercise both benign and adversarial request patterns.
+
+\textbf{Prototype-generated operational data.}
+The first category consists of measurements produced directly by the implemented system during controlled experiments. These include chunk-level deduplication outcomes, storage reduction behaviour, Redis lookup latency, encryption and OPRF timing, throughput, and adaptive PoW challenge statistics. Since these data are generated by the running prototype rather than by offline simulation, they provide the empirical basis for evaluating the practical behaviour of the storage and control plane.
+
+\textbf{Behavioural evaluation dataset.}
+The second category consists of a 2200-window behavioural stress-test dataset constructed using the same feature schema as the live telemetry pipeline. Each observation window is represented using the twelve behavioural features extracted from request streams, thereby ensuring that offline evaluation remains consistent with live inference. The dataset contains both benign and anomalous windows so that the supervised Random Forest classifier and the cold-start One-Class SVM detector can be assessed under controlled but varied behavioural conditions.
+
+The benign portion of this dataset is not arbitrarily generated. Instead, it is calibrated against 347 Azure Functions invocation trace-derived windows so that broad request-spacing and workload characteristics reflect a real cloud-derived reference. The anomalous portion is generated through rule-based attack simulation designed to represent the behavioural signatures of hash probing, ownership fraud, and deduplication denial-of-service. Accordingly, the behavioural dataset should be interpreted as a calibrated stress-test resource rather than as a corpus of field-collected adversarial sessions.
+
+This distinction between prototype-measured system data and trace-anchored simulated behavioural data is methodologically central to the thesis. It ensures that claims about storage efficiency and implementation cost are grounded in actual execution, while claims about behavioural detection are framed honestly as controlled evaluation results derived from a calibrated synthetic workload.
+
+\begin{table}[H]
+\centering
+\caption{Dataset Summary}
+\label{tab:dataset}
+\begin{tabularx}{\textwidth}{L{8cm}C{2.5cm}C{2.5cm}}
+\toprule
+\textbf{Category} & \textbf{Count} & \textbf{Percentage} \\
+\midrule
+Total Samples                              & 2200 & 100\% \\
+Normal (trace-aligned synthetic benign)    & 1400 & 63.6\% \\
+Hash Probing                               & 270  & 12.3\% \\
+Ownership Fraud                            & 260  & 11.8\% \\
+Deduplication DoS                          & 270  & 12.3\% \\
+Total Anomalies                            & 800  & 36.4\% \\
+\midrule
+Azure Trace-Derived Benign Windows (Calibration) & 347 & -- \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The class distribution shown in Table~\ref{tab:dataset} was selected to preserve a realistic majority of benign activity while still providing enough anomalous samples for supervised learning, cold-start tuning, and comparative evaluation. The benign class remains dominant, which is more consistent with the expected operating conditions of a deployed storage system in which abusive activity is important but not predominant. At the same time, the three anomalous classes are represented in sufficient quantity to support both binary anomaly detection and multiclass attack attribution.
+
+\section{Data Preprocessing and Feature Construction}
+
+This section describes how raw prototype outputs and behavioural logs are transformed into the structured artefacts consumed by the cryptographic, storage, and detection components. Since the proposed framework combines chunk-oriented secure storage with request-level behavioural analysis, preprocessing occurs along two distinct but related paths: a content-processing path for uploaded files and a telemetry-processing path for behavioural modelling.
+
+\subsection{Content Preprocessing for Deduplication}
+
+The content-processing path begins when an uploaded file is segmented using FastCDC. Variable-size chunking was selected because it preserves deduplication efficiency under small insertions and deletions more effectively than fixed-size chunking. Each chunk is then converted into a server-secret HMAC-SHA256 token, which acts as the deduplication handle used for index lookup. This preprocessing stage therefore converts raw file bytes into a sequence of chunk objects with associated tokens, lookup results, and encryption metadata.
+
+For newly observed chunks, the implementation derives a message-locked key through the Ristretto255 OPRF path and then expands it with HKDF into a per-chunk encryption context. Each chunk is segmented into 4096-byte encryption segments, assigned a fresh random nonce, and protected with AES-256-GCM using the token and segment index as authenticated context. This staged preparation is important because it ensures that storage processing remains deterministic where deduplication requires it, while still preserving confidentiality and integrity in the stored representation.
+
+\subsection{Telemetry Preprocessing for Behavioural Analysis}
+
+The live telemetry pipeline and the evaluation dataset share a common twelve-feature representation.
+This design ensures that the reported behavioural experiments remain tied to the structure of the implemented system rather than to an abstract offline dataset with unrelated attributes.
+Each feature captures one aspect of request behaviour, such as request frequency, duplicate pressure, timing irregularity, or deviation from baseline user activity.
+Taken together, these features form a compact but expressive representation of how a client interacts with the deduplication service over a defined observation window.
+
+From an implementation perspective, feature construction involves aggregating raw request events into window-level statistics.
+These statistics are then standardised before being passed to the detection models.
+Using the same feature schema for live inference and offline evaluation reduces the gap between system implementation and reported performance, which is especially important in a thesis where the value of the evaluation depends on its faithfulness to the deployed pipeline.
+
+\subsection{Feature Standardisation and Evaluation Readiness}
+
+Before training or inference, the behavioural feature vectors are normalised using the same preprocessing assumptions across the supervised and unsupervised paths. This step is especially important for the One-Class SVM, whose decision boundary is sensitive to scale differences across dimensions. The resulting preprocessing pipeline therefore ensures that live telemetry, simulated benign sessions, and simulated attack windows all share a consistent representation. In implementation terms, this consistency is one of the central reasons the behavioural results reported later can be treated as representative of the deployed inference pipeline rather than as disconnected offline experiments.
+
+\section{Model and Module Implementation}
+
+\subsection{Core Deduplication and Encryption}
+
+The encryption sub-system implements a three-layer construction.
+
+\textbf{Layer~1 — Secret-Assisted Token.}
+\begin{equation}
+  T_i = \HMAC\!\left(\KS,\ C_i\right)
+  \label{eq:tok2}
+\end{equation}
+where $\KS$ is a 256-bit key held exclusively on the server.
+
+\textbf{Layer~2 — Per-Chunk Key Derivation.}
+\begin{equation}
+  \Kchunk = \HKDF\!\left(\KM,\ \mathrm{SHA256}(T_i),\ \mathit{info}\right)
+  \label{eq:kchunk}
+\end{equation}
+The $\mathit{info}$ context string encodes the framework version and chunk index to prevent cross-context key reuse.
+
+\textbf{Layer~3 — Segmented AES-256-GCM Encryption.}
+Each 4096-byte segment receives a uniformly random 12-byte nonce; the deduplication token $T_i$ concatenated with the segment index serves as additional authenticated data (AAD).
+The AAD binding ensures that decryption will fail if the token or segment index are tampered with, providing both confidentiality and integrity at the chunk level.
+This three-layer construction reflects a deliberate separation of responsibilities.
+The first layer hides deduplication identity from outsiders, the second layer derives a chunk-specific cryptographic context, and the third layer performs authenticated encryption suitable for storage and retrieval.
+Describing the encryption module in layered form is useful in thesis writing because it clarifies that confidentiality, token secrecy, and integrity are achieved through different but coordinated mechanisms rather than through a single primitive.
+
+The full implementation path for upload handling is summarised in Algorithm~\ref{alg:master}, while Algorithm~\ref{alg:dedup} details the storage and duplicate-verification branch that governs new-chunk insertion and duplicate reuse.
+
+\begin{algorithm}[H]
+\caption{Master Upload Procedure — \textsc{SecureDedupSystem.Upload}}
+\label{alg:master}
+\begin{algorithmic}[1]
+\Procedure{Upload}{$\mathit{user\_id}, \mathit{filepath}, \mathit{password}$}
+  \State \textbf{Phase 0: Authentication and Policy Enforcement}
+  \State $\mathit{user} \gets \Call{EnsureUser}{\mathit{user\_id}, \mathit{password}}$
+  \State $K_U \gets \Call{ArgonDerive}{\mathit{password}, \mathit{user.salt}}$
+  \State $\mathit{policy} \gets \Call{Redis.GetPolicy}{\mathit{user\_id}}$
+  \If{$\mathit{policy} = \textsc{BLOCK}$}
+    \State \Return \textsc{HTTP 403}
+  \ElsIf{$\mathit{policy} = \textsc{RATE\_LIMIT}$}
+    \State \Call{EnforceRateLimit}{\mathit{user\_id}}
+  \EndIf
+
+  \State \textbf{Phase 1: Chunking and Token Generation}
+  \State $\{C_1, C_2, \ldots, C_n\} \gets \Call{FastCDC}{\mathit{filepath}}$
+  \For{each chunk $C_i$}
+    \State $T_i \gets \HMAC(\KS,\ C_i)$
+  \EndFor
+
+  \State \textbf{Phase 2: Deduplication Index Lookup and PoW Gating}
+  \State $\mathit{challenges} \gets [\,]$
+  \For{each $(C_i, T_i)$}
+    \If{$\Call{Redis.Exists}{T_i}$}
+      \If{\textbf{not} $\Call{VerifyOrConsumePow}{\mathit{user\_id}, T_i, C_i}$}
+        \State $\mathit{ch} \gets \Call{IssueAdaptivePow}{\mathit{user\_id}, T_i, C_i}$
+        \State \textbf{append} $\mathit{ch}$ to $\mathit{challenges}$
+      \EndIf
+    \EndIf
+  \EndFor
+  \If{$\mathit{challenges} \neq [\,]$}
+    \State \Return \textsc{HTTP 409} with $\mathit{challenges}$
+  \EndIf
+
+  \State \textbf{Phase 3: Storage Mutation and Behavioural Detection}
+  \For{each $(C_i, T_i)$}
+    \If{\textbf{not} $\Call{Redis.Exists}{T_i}$}
+      \State $\KM \gets \Call{OprfDerive}{T_i, \mathit{epoch}}$
+      \State $\Kchunk \gets \HKDF(\KM,\ \mathrm{SHA256}(T_i))$
+      \State $(C_i^{\mathit{enc}},\ t_i) \gets \Call{RefaEncrypt}{C_i, \KM, K_U}$
+      \State \Call{S3.Store}{$T_i$,\ $C_i^{\mathit{enc}}$}
+      \State \Call{Redis.Set}{$T_i$,\ $\mathit{refcount}{=}1$}
+      \State \Call{DynamoDB.Put}{$\mathit{user\_id}$,\ $T_i$,\ $t_i$}
+    \Else
+      \State \Call{Redis.Incr}{$T_i$}
+      \If{$\Call{Redis.Get}{T_i}.\mathit{count} \bmod T_M = 0$}
+        \State \Call{S3.UpdateCiphertext}{$T_i$,\ $C_i^{\mathit{enc}}$}
+      \EndIf
+    \EndIf
+  \EndFor
+
+  \State $\mathbf{x} \gets \Call{ExtractFeatures}{\mathit{user\_id}}$
+  \State $(r, \hat{y}) \gets \Call{Detect}{\mathbf{x}}$
+  \State $\pi \gets \Call{PolicyDecide}{r}$
+  \State \Call{Redis.SetPolicy}{\mathit{user\_id},\ $\pi$}
+  \State \Call{UpdateReputation}{\mathit{user\_id},\ $r$,\ $\hat{y}$}
+  \State \Return \textsc{HTTP 200} with chunk tags and anomaly report
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{Core Deduplication and Adaptive PoW Sub-Procedure}
+\label{alg:dedup}
+\begin{algorithmic}[1]
+\Procedure{DedupAndPoW}{$\mathit{user\_id}, T_i, C_i, \mathit{bpow\_proof}$}
+  \If{$\Call{Redis.Exists}{T_i}$}
+    \If{$\Call{VerifyPow}{\mathit{bpow\_proof}, T_i, C_i}$}
+      \State \Call{Redis.Incr}{$T_i$}
+      \State \Call{MarkVerified}{\mathit{user\_id},\ $T_i$}
+      \State \Return \textsc{DUPLICATE\_VERIFIED}
+    \Else
+      \State $r \gets \Call{GetRiskScore}{\mathit{user\_id}}$
+      \State $\varrho \gets \Call{GetReputation}{\mathit{user\_id}}$
+      \State $\delta \gets \Call{GetDuplicatePressure}{\mathit{user\_id}}$
+      \State $d \gets \mathrm{clamp}(0.65r + 0.25(1-\varrho) + 0.10\delta,\ 0,\ 1)$
+      \State $L \gets L_{\mathit{base}} + \lfloor L_{\mathit{ext}} \cdot d \rceil$
+      \State $\mathit{ch} \gets \Call{BuildChallenge}{\mathit{nonce},\ T_i,\ L}$
+      \State \Call{Redis.Store}{\mathit{ch}}
+      \State \Return \textsc{POW\_REQUIRED},\ $\mathit{ch}$
+    \EndIf
+  \Else
+    \State $(\bar{M},\ r) \gets \Call{Blind}{C_i}$
+    \State $(g^k,\ \bar{M}^k) \gets \Call{ServerEvaluate}{\bar{M},\ \mathit{epoch}}$
+    \State $N \gets \Call{Unblind}{\bar{M}^k,\ g^k,\ r}$
+    \State $K_M \gets H_2(N \;\|\; \mathrm{SHA256}(C_i) \;\|\; \mathit{epoch})$
+    \State $\Kchunk \gets \HKDF(K_M,\ \mathrm{SHA256}(T_i),\ \mathit{info})$
+    \State $(C_i^{\mathit{enc}},\ t_i) \gets \Call{RefaEncrypt}{C_i,\ K_M,\ K_U}$
+    \State \Call{S3.Store}{$T_i$,\ $C_i^{\mathit{enc}}$}
+    \State \Call{Redis.Set}{$T_i$,\ $\mathit{refcount}{=}1$}
+    \State \Return \textsc{NEW\_CHUNK\_STORED}
+  \EndIf
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Adaptive PoW and Reputation}
+
+This implementation module realises the policy-sensitive ownership verification path described earlier in the methodology chapter. The duplicate verification engine consumes three dynamic control signals: present-session anomaly score, historical reputation, and duplicate-request pressure. These values are retrieved from the live telemetry and Redis-backed control state, combined through the weighted difficulty function, and translated into a challenge length used to generate the PoW payload returned to the client.
+
+In implementation terms, this module is tightly coupled to duplicate handling rather than to the initial upload path. A client uploading new chunks bypasses this branch entirely, while duplicate-heavy or suspicious request streams increasingly interact with it. This asymmetry is intentional, because the framework is designed to preserve low-friction behaviour for ordinary uploads while concentrating verification cost on requests that exhibit patterns associated with ownership abuse or duplicate flooding.
+
+\textbf{Difficulty score:}
+\begin{equation}
+  d = \mathrm{clamp}\!\left(0.65\,r + 0.25\,(1-\varrho) + 0.10\,\delta,\ 0,\ 1\right)
+  \label{eq:diff2}
+\end{equation}
+
+\textbf{Challenge length:}
+\begin{equation}
+  L = L_{\mathit{base}} + \left\lfloor L_{\mathit{ext}} \cdot d \right\rceil
+  \label{eq:length}
+\end{equation}
+where $L_{\mathit{base}} = 32$~bytes and $L_{\mathit{ext}} = 160$~bytes give challenge lengths from 32 to 192 bytes across the minimum- to maximum-risk range.
+
+\textbf{Attacker success rate reduction:}
+\begin{equation}
+  \mathrm{ASR} = \frac{S_{\mathit{static}} - S_{\mathit{adaptive}}}{S_{\mathit{static}}} \times 100\%
+  \label{eq:asr}
+\end{equation}
+
+\subsection{Behaviour Detection Models}
+
+\subsubsection{Supervised Detection Module}
+
+The supervised module maps behavioural feature vectors to class labels $\hat{y} \in \{\text{normal, hash\_probing, ownership\_fraud, dedup\_dos}\}$ and a risk score $r \in [0,1]$.
+Random Forest was selected because it offers strong performance on mixed-scale tabular telemetry while remaining interpretable enough for thesis discussion, ablation, and deployment-oriented reasoning.
+A Random Forest classifier with 120 estimators and maximum depth 4 is trained on 70\% of the 2200-window simulated stress-test dataset with stratified splitting; evaluation uses the remaining 30\%.
+A separate multiclass attribution model uses the extended entropy features on the same split to report Macro-$F_1$ across the four behavioural classes, thereby distinguishing overall anomaly detection quality from per-attack attribution quality.
+The practical motivation for choosing Random Forest is that it provides a good balance between predictive quality and implementation simplicity.
+Unlike highly parameter-sensitive deep sequence models, it can be trained robustly on structured feature vectors without extensive tuning, and it supports explanation of feature importance and decision behaviour in a way that is more suitable for an engineering thesis.
+This makes it an appropriate primary supervised baseline for a deployable behavioural monitoring layer.
+
+\subsubsection{Unsupervised Detection Module}
+
+The reported cold-start path uses a One-Class SVM trained exclusively on benign windows after feature standardisation.
+This path is intended for the deployment phase in which labelled attack artefacts are absent or too sparse to justify supervised training, and therefore serves as the framework's initial line of behavioural screening.
+Isolation Forest and z-score rules were retained as transparent baselines during tuning, but the OCSVM operating point is reported because it provided the most stable precision-recall trade-off on the simulated stress-test dataset.
+
+The normalized anomaly score is:
+\begin{equation}
+  r = \min\!\left(1,\ \frac{s_{\mathrm{OCSVM}}(\mathbf{x})}{\tau_{\mathrm{OCSVM}}}\right)
+  \label{eq:unsup}
+\end{equation}
+where $s_{\mathrm{OCSVM}}(\mathbf{x})$ is the unsigned anomaly score and $\tau_{\mathrm{OCSVM}}$ is the 75th percentile of the benign reference score distribution.
+A request is classified as anomalous when $r \geq 1$.
+Methodologically, the cold-start detector addresses an important deployment scenario: the early phase in which labelled attack traces are unavailable.
+By training only on benign reference behaviour, the One-Class SVM provides an initial screening mechanism that can operate before a supervised model has been fully justified.
+The cold-start path therefore complements the supervised module rather than competing with it, and together they form the dual-mode behavioural design proposed in this thesis.
+
+Algorithm~\ref{alg:detect} summarises the implementation path used to transform extracted telemetry into a behavioural decision and control update.
+
+\begin{algorithm}[H]
+\caption{Behaviour Detection and Policy Update}
+\label{alg:detect}
+\begin{algorithmic}[1]
+\Procedure{DetectAndUpdatePolicy}{$\mathit{user\_id}$}
+  \State $\mathbf{x} \gets \Call{ExtractFeatures}{\mathit{user\_id}}$
+  \If{$\Call{ModelArtifactsExist}{}$}
+    \State $(\hat{y},\ r) \gets \Call{RandomForestPredict}{\mathbf{x}}$
+  \Else
+    \State $s_{\mathrm{OCSVM}} \gets \Call{OneClassSVM.Score}{\mathbf{x}}$
+    \State $r \gets \min\!\left(1,\ s_{\mathrm{OCSVM}} / \tau_{\mathrm{OCSVM}}\right)$
+    \State $\hat{y} \gets (\text{normal if } r < \tau \text{ else anomaly})$
+  \EndIf
+  \State $\pi \gets \Call{PolicyDecide}{r}$
+  \State \Call{Redis.SetPolicy}{\mathit{user\_id},\ $\pi$}
+  \State \Call{UpdateReputation}{\mathit{user\_id},\ $r$,\ $\hat{y}$}
+  \State \Call{LogTelemetry}{\mathit{user\_id},\ $\mathbf{x}$,\ $r$,\ $\hat{y}$,\ $\pi$}
+  \State \Return $(r,\ \hat{y},\ \pi)$
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Storage Performance and Operational Behaviour}
+
+The deduplication and storage module is evaluated from two complementary perspectives: storage efficiency and operational cost.
+Storage efficiency is captured through the extent to which redundant content is removed, while operational cost is reflected through index lookup latency, cryptographic overhead, and effective chunk throughput.
+
+\textbf{Storage Reduction Ratio (SRR):}
+\begin{equation}
+  \mathrm{SRR} = 1 - \frac{\text{Physical Size}}{\text{Logical Size}}
+  \label{eq:srr}
+\end{equation}
+
+\textbf{System throughput:}
+\begin{equation}
+  \text{Throughput} = \frac{\text{Processed Chunks}}{\text{Elapsed Time}} \quad (\text{chunks/second})
+  \label{eq:tp}
+\end{equation}
+
+The cross-user deduplication experiment (64~KB file, 4~KB chunks) confirms deduplication: the first upload registers 16 new DynamoDB metadata entries; the second upload by a different user registers 0, proving that the secret-assisted scheme preserves cross-user deduplication while making tokens opaque to outsiders.
+
+\section{Tools and Libraries}
+
+The selected technology stack reflects the need to balance practicality, implementation speed, and conceptual alignment with cloud deployment patterns. Python~3.12 was chosen as the primary implementation language because it provides a mature ecosystem for cryptography, machine learning, data processing, and API development within a single development environment. FastAPI supports rapid implementation of the upload and PoW endpoints, while Redis offers low-latency access suitable for both deduplication lookup and control-state caching. LocalStack was selected to emulate S3-compatible cloud storage behaviour without requiring a fully managed external deployment during development.
+
+The machine-learning stack was chosen with a similar philosophy. Scikit-learn provides strong support for structured behavioural classification and anomaly detection, making it appropriate for the tabular feature pipeline used in this work. The cryptographic stack combines standard, well-understood primitives with a more advanced blind derivation component: HMAC-SHA256 for secret-assisted token generation, HKDF for contextual key expansion, AES-256-GCM for authenticated encryption, and Ristretto255 via \texttt{rbcl} for the real OPRF path. Together, these choices support a prototype that is both technically meaningful and practically implementable in a final-year thesis setting.
+
+\section{Deployment Architecture and System Integration}
+
+Operationally, the prototype follows a modular local deployment pattern that mirrors the logic of a cloud service without requiring a full external infrastructure stack during development. The REST interface is exposed through FastAPI and Uvicorn, Redis acts as the low-latency control and deduplication state store, SQLite retains telemetry for feature extraction and analysis, and LocalStack provides an S3-compatible object-store interface for ciphertext persistence. This arrangement is intentionally implementation-oriented: each service corresponds to a clear functional responsibility in the final prototype, while still remaining lightweight enough for iterative experimentation.
+
+The integration path begins at the API layer, where requests are authenticated and logged before entering the chunk-processing pipeline. Chunk tokens, reference counts, reputation entries, and policy decisions are cached or retrieved through Redis, while encrypted chunk payloads are written to the storage backend through the storage adapter. Telemetry generated by upload handling is written to the local database and consumed by the behavioural pipeline, which in turn produces risk scores and policy updates that are pushed back into Redis. In this sense, the implemented prototype operates as a closed control loop even in the local environment: storage operations, behavioural monitoring, and control decisions all interact within the same request-processing cycle.
+
+\section{Implementation Workflow}
+
+The implementation workflow follows the logical sequence of the proposed architecture.
+First, the storage and cryptographic path was established so that files could be chunked, tokenised, encrypted, and stored through the local cloud-simulated environment.
+Second, telemetry logging and request aggregation were added in order to expose behavioural evidence from live interactions.
+Third, the behavioural feature pipeline and the two-mode detection subsystem were integrated so that risk scores could be generated from either supervised artefacts or a cold-start detector.
+Finally, the adaptive control layer was connected to the duplicate-handling path so that PoW challenge generation, policy updates, and reputation changes could all be driven by observed client behaviour.
+
+This staged implementation strategy is relevant to the thesis because it mirrors how such a system would likely evolve in practice.
+Secure storage must function correctly before behavioural monitoring can be meaningfully attached to it, and behavioural monitoring must produce stable outputs before enforcement policies can depend on them.
+The final prototype therefore represents the integration of multiple layers that were designed, validated, and then connected into a unified workflow.
+
+%% =========================================================
+%% CHAPTER 5 — RESULTS AND DISCUSSION
+%% =========================================================
+\chapter{RESULTS AND DISCUSSION}
+
+\section{Experimental Design}
+
+The experimental evaluation was designed to measure the framework along four complementary dimensions: behavioural detection quality, adaptive ownership-verification effectiveness, storage efficiency, and implementation cost.
+These dimensions correspond directly to the central thesis claim that secure deduplication should not be judged only by how much storage it saves, but also by how effectively it protects the deduplication interface from misuse while preserving workable performance.
+
+The evaluation therefore combines prototype measurements and behavioural stress testing.
+Prototype measurements are used whenever the implemented system can be exercised directly, such as in latency, throughput, storage reduction, and duplicate verification cost.
+Behavioural detection, by contrast, is evaluated on the 2200-window calibrated stress-test dataset because real adversarial traces were not available in sufficient quantity or diversity.
+This separation is methodologically important and should be kept in mind when interpreting the reported results.
+
+\section{Supervised Detection Results}
+
+\begin{table}[H]
+\centering
+\caption{Supervised Detection Module — Performance Metrics}
+\label{tab:sup}
+\begin{tabularx}{\textwidth}{L{9cm}C{4cm}}
+\toprule
+\textbf{Metric} & \textbf{Value} \\
+\midrule
+PR-AUC                                             & 0.9686 \\
+$F_1$-Score (Binary)                               & 0.8990 \\
+Precision                                          & 0.8898 \\
+Recall                                             & 0.9083 \\
+True Negatives (TN)                                & 393 \\
+False Positives (FP)                               & 27 \\
+False Negatives (FN)                               & 22 \\
+True Positives (TP)                                & 218 \\
+Multiclass Macro-$F_1$                             & 0.8924 \\
+\midrule
+Simulated stress-test windows                           & 2200 \\
+Azure trace calibration windows                         & 347 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The supervised module achieves a PR-AUC of $0.9686$, indicating strong but not perfect ranking of anomalous windows above benign ones across decision thresholds.
+False positives remain limited (27 on the hold-out split), while 218 of 240 attack windows are correctly detected.
+The binary $F_1$ score of $0.8990$ and Macro-$F_1$ of $0.8924$ together suggest that the classifier is not merely separating benign and anomalous activity, but is also preserving useful discriminatory structure across the individual attack categories.
+From a thesis perspective, this is important because the value of the behavioural layer lies not only in flagging suspicious activity, but also in helping explain \textit{what kind} of misuse is likely occurring.
+Because the behavioural labels are simulated and rule-derived, these numbers should be interpreted as stress-test performance rather than ground-truth field accuracy.
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{fig51a_binary_cm}     %% fig51a_binary_cm.png
+    \caption{Binary Confusion Matrix}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{fig51b_multiclass_cm}  %% fig51b_multiclass_cm.png
+    \caption{Multiclass Confusion Matrix}
+  \end{subfigure}
+  \caption{Supervised Behavioural Detection Results}
+  \label{fig:sup_cm}
+\end{figure}
+
+\section{Unsupervised Detection Results}
+
+\begin{table}[H]
+\centering
+\caption{Cold-Start Unsupervised Detection — OCSVM Operating Point}
+\label{tab:unsup}
+\begin{tabularx}{\textwidth}{L{9cm}C{4cm}}
+\toprule
+\textbf{Metric} & \textbf{Value} \\
+\midrule
+PR-AUC                                                   & 0.9191 \\
+$F_1$-Score (Binary)                                     & 0.8134 \\
+Precision                                                & 0.7043 \\
+Recall                                                   & 0.9625 \\
+True Negatives (TN)                                      & 323 \\
+False Positives (FP)                                     & 97 \\
+False Negatives (FN)                                     & 9 \\
+True Positives (TP)                                      & 231 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The selected OCSVM operating point emphasises recall over precision: it detects 231 of 240 attack windows on the hold-out split, but it also flags 97 benign windows.
+This trade-off is consistent with the intended role of the cold-start detector.
+In the absence of labelled artefacts, it is preferable to over-screen suspicious activity and allow later policy logic or analyst review to absorb some false alarms, rather than to miss a substantial portion of early malicious behaviour.
+Accordingly, the cold-start path is best interpreted as an early warning screen, while the supervised module remains the preferred high-precision detector once labelled behavioural artefacts are available.
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{fig52a_unsup_cm}      %% fig52a_unsup_cm.png
+    \caption{Confusion Matrix}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{fig52b_pr_curve}      %% fig52b_pr_curve.png
+    \caption{Precision-Recall Curve}
+  \end{subfigure}
+  \caption{Cold-Start Behavioural Detection Results}
+  \label{fig:unsup}
+\end{figure}
+
+\section{Adaptive PoW Results}
+
+\begin{table}[H]
+\centering
+\caption{Adaptive PoW — Comparison Results}
+\label{tab:pow}
+\begin{tabularx}{\textwidth}{L{9.5cm}C{3.5cm}}
+\toprule
+\textbf{Metric} & \textbf{Value} \\
+\midrule
+Static baseline proof length                               & 32 bytes \\
+Adaptive mean proof length — all users                    & 71.85 bytes \\
+Adaptive mean proof length — normal users                 & 49.58 bytes \\
+Adaptive mean proof length — anomalous users              & 110.82 bytes \\
+Attacker success rate — static (fixed-budget baseline)    & 0.8647 \\
+Attacker success rate — adaptive system                   & 0.4713 \\
+Relative attacker success reduction (Eq.~\ref{eq:asr})   & 45.49\% \\
+Benign user proof length overhead vs baseline             & 54.93\% \\
+\midrule
+Ristretto255 OPRF latency (mean, 4~KB chunk)              & 0.646~ms \\
+HMAC fallback OPRF latency (mean, 4~KB chunk)             & 0.024~ms \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Under the fixed-budget solver model, the adaptive mechanism reduces estimated attacker success probability from $0.8647$ to $0.4713$, a reduction of $45.49\%$ (Eq.~\eqref{eq:asr}).
+The mean challenge length imposed on anomalous users ($110.82$~bytes) is more than double that imposed on normal users ($49.58$~bytes), showing that the policy engine meaningfully differentiates between user populations rather than applying near-uniform challenge cost.
+This behaviour is central to the thesis argument: adaptive PoW is valuable only if it strengthens resistance against abusive duplicate claims without making the system impractical for honest use.
+The Ristretto255 OPRF adds approximately $0.646$~ms per chunk for key derivation --- concentrated in the key path, not bulk encryption --- which represents a modest and interpretable cost for upgrading from a simulation to a cryptographically sound blind evaluation path.
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}[b]{0.32\textwidth}
+    \includegraphics[width=\textwidth]{fig53a_difficulty_dist}   %% fig53a_difficulty_dist.png
+    \caption{Difficulty Distribution}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.32\textwidth}
+    \includegraphics[width=\textwidth]{fig53b_challenge_length}  %% fig53b_challenge_length.png
+    \caption{Challenge Length Comparison}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.32\textwidth}
+    \includegraphics[width=\textwidth]{fig53c_attacker_success}  %% fig53c_attacker_success.png
+    \caption{Attacker Success Reduction}
+  \end{subfigure}
+  \caption{Adaptive Proof-of-Ownership Results}
+  \label{fig:pow}
+\end{figure}
+
+\section{Deduplication Performance}
+
+\begin{table}[H]
+\centering
+\caption{Deduplication Module — Storage and Throughput Metrics}
+\label{tab:dedup}
+\begin{tabularx}{\textwidth}{L{9.5cm}C{3.5cm}}
+\toprule
+\textbf{Metric} & \textbf{Value} \\
+\midrule
+Storage Reduction Ratio (SRR)                                & 65\%–80\% \\
+HMAC-SHA256 token computation per chunk                      & $<0.02$~ms \\
+AES-256-GCM encryption per chunk                             & $<0.10$~ms \\
+Redis index lookup latency                                   & $<0.50$~ms \\
+Index lookup complexity                                      & $O(1)$ \\
+System throughput                                            & 50\,000 chunks/s \\
+Cross-user dedup: 1st upload DTable delta (64~KB file)       & 16 new entries \\
+Cross-user dedup: 2nd upload DTable delta (64~KB file)       & 0 new entries \\
+Dedup savings on synthetic Zipf workload (1000 chunks)       & 91.6\% \\
+REFA envelope overhead vs plain AES-GCM at 4~KB             & $\approx 3.9\%$ \\
+REFA envelope overhead vs plain AES-GCM at 8~KB             & $\approx 2.0\%$ \\
+REFA envelope overhead vs plain AES-GCM at 16~KB            & $\approx 1.0\%$ \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The cross-user deduplication experiment provides the strongest empirical evidence that deduplication is preserved under the secret-assisted scheme: the second upload adds zero new entries to the metadata table.
+This is a practically important result because it demonstrates that the introduction of secret-assisted identifiers and stronger key derivation does not collapse the very storage benefit that motivates deduplication in the first place.
+The overhead figures show the complementary side of that result: REFA envelope overhead decreases with chunk size and is practically negligible at 16~KB, while HMAC token generation, AES-GCM encryption, and Redis lookup remain within low-latency operational bounds.
+Taken together, the measurements indicate that the proposed security additions are not merely theoretically stronger, but remain compatible with a serviceable data-plane implementation.
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}[b]{0.32\textwidth}
+    \includegraphics[width=\textwidth]{fig55a_storage_reduction}  %% fig55a_storage_reduction.png
+    \caption{Storage Reduction by Workload}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.32\textwidth}
+    \includegraphics[width=\textwidth]{fig55b_throughput}          %% fig55b_throughput.png
+    \caption{Throughput vs Chunk Size}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.32\textwidth}
+    \includegraphics[width=\textwidth]{fig55c_latency}            %% fig55c_latency.png
+    \caption{Per-Operation Latency}
+  \end{subfigure}
+  \caption{Deduplication Storage and Throughput Performance}
+  \label{fig:dedup}
+\end{figure}
+
+\section{Behavioural Trace Alignment}
+
+\begin{table}[H]
+\centering
+\caption{Behavioural Alignment — Azure Trace vs Synthetic Benign (KS / Wasserstein)}
+\label{tab:align}
+\begin{tabularx}{\textwidth}{L{3.5cm}C{2.2cm}C{2.2cm}C{2.5cm}C{2.5cm}}
+\toprule
+\textbf{Feature} & \textbf{Trace Mean} & \textbf{Synth Mean} & \textbf{Wasserstein} & \textbf{KS $p$-value} \\
+\midrule
+\texttt{tau\_avg}         & 4.917  & 5.758  & 0.841 & 0.150 \\
+\texttt{tau\_std}         & 6.168  & 4.223  & 1.945 & 0.004 \\
+\texttt{tau\_min}         & 0.714  & 0.989  & 0.367 & 0.000 \\
+\texttt{tau\_max}         & 21.606 & 13.531 & 8.076 & 0.000 \\
+\texttt{interarrival\_cv} & 1.735  & 0.843  & 0.891 & 0.000 \\
+\texttt{n\_chunks}        & 151.8  & 152.0  & 5.519 & 1.000 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Behavioural Ablation — Z-Score vs Supervised vs Hybrid Trace Gate}
+\label{tab:ablation}
+\begin{tabularx}{\textwidth}{L{5cm}C{1.8cm}C{1.8cm}C{1.8cm}C{1.8cm}C{1.8cm}}
+\toprule
+\textbf{Method} & \textbf{Prec.} & \textbf{Recall} & \textbf{$F_1$} & \textbf{AUROC} & \textbf{PR-AUC} \\
+\midrule
+Z-score only          & 0.5333 & 0.1000 & 0.1684 & 0.6306 & 0.4836 \\
+Supervised only       & 0.8898 & 0.9083 & 0.8990 & 0.9791 & 0.9686 \\
+Hybrid trace gate     & 0.8365 & 0.9167 & 0.8748 & 0.9323 & 0.8386 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The alignment table shows that the synthetic benign generator tracks the Azure trace on overall request spacing (\texttt{tau\_avg}) and window size (\texttt{n\_chunks}), while diverging on variance and tail-sensitive fields such as \texttt{tau\_std}, \texttt{tau\_max}, and \texttt{interarrival\_cv}.
+This means that the synthetic layer should be described as \textit{calibrated} rather than identical.
+For thesis reporting, this distinction is important because it frames the generator honestly: it captures broad benign workload structure well enough to support stress testing, but it does not claim full reproduction of production trace statistics.
+
+The ablation (Table~\ref{tab:ablation}) further clarifies the modelling choices.
+Z-score alone is insufficient ($F_1 = 0.1684$), showing that simple thresholding cannot capture the behavioural complexity of the request stream.
+Supervised classification is the strongest standalone detector ($F_1 = 0.8990$), while the hybrid trace gate slightly increases recall ($0.9167$) at the cost of lower precision ($0.8365$).
+This pattern supports the architectural choice adopted in the thesis: trace alignment is useful as a calibration and gating aid, but high-quality detection still depends primarily on richer learned behavioural structure.
+
+\section{Comparative Analysis}
+
+\begin{table}[H]
+\centering
+\caption{Comparative Summary — Proposed Framework vs Related Schemes}
+\label{tab:compare}
+\begin{tabularx}{\textwidth}{L{4.5cm}C{1.4cm}C{1.4cm}C{1.4cm}C{1.4cm}C{2.5cm}}
+\toprule
+\textbf{Feature} & \textbf{MLE~\cite{wu2024refa}} & \textbf{REED} & \textbf{TED~\cite{li2020}} & \textbf{REFA~\cite{wu2024refa}} & \textbf{Proposed} \\
+\midrule
+Deduplication          & Yes & Yes & Yes    & Yes     & Yes \\
+Data Integrity         & No  & Yes & Yes    & Yes     & Yes \\
+Frequency Attack Res.  & No  & No  & Yes    & Yes     & Yes \\
+Access Control         & No  & Yes & No     & Yes     & Yes \\
+Behavioural Detection  & No  & No  & No     & No      & Yes \\
+Adaptive PoW           & No  & No  & No     & Partial & Yes \\
+Real Blind OPRF        & No  & No  & No     & Ext.~KS & Built-in \\
+Side-Channel Resist.   & No  & No  & No     & Partial & Yes \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The proposed framework is the only surveyed system that integrates all eight listed security properties simultaneously.
+This comparison is not intended to imply that every prior scheme optimises for the same deployment setting, but it does show that the present work occupies a distinct design point: it combines cryptographic protection, adaptive control, and behavioural intelligence in a single deployable workflow.
+REFA~\cite{wu2024refa} provides the closest functionality but lacks built-in behavioural detection, relies on an external key server for the blind OPRF, and provides only partial adaptive PoW.
+The proposed system can therefore be understood as both an implementation-oriented extension of REFA and a thesis-level argument for treating secure deduplication as a joint systems-and-security problem rather than as a purely cryptographic one.
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{fig54a_module_comparison}  %% fig54a_module_comparison.png
+    \caption{Module Performance Comparison}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{fig54b_perclass_f1}        %% fig54b_perclass_f1.png
+    \caption{Supervised Per-Class $F_1$}
+  \end{subfigure}
+  \caption{Comparative Detection Performance Analysis}
+  \label{fig:compare}
+\end{figure}
+
+\section{Discussion}
+
+Taken as a whole, the results support three main conclusions.
+First, the behavioural layer is effective enough to play an operational role rather than serving as a purely offline analytics component.
+Both the supervised and cold-start paths provide useful security signal, although they occupy different points in the precision-recall trade-off.
+Second, the adaptive PoW mechanism meaningfully reallocates verification burden toward more suspicious clients, which is precisely the intended control effect of the framework.
+Third, the storage measurements indicate that these security additions do not eliminate the principal economic value of deduplication.
+
+At the same time, the results should not be overstated.
+The behavioural metrics are strong under the reported simulated stress-test conditions, but they are not a substitute for large-scale field validation against diverse real-world attacker traces.
+Similarly, the Ristretto255 OPRF cost is acceptable in the present prototype, but its impact under substantially larger workloads would need to be studied in more detail.
+The thesis therefore demonstrates feasibility and strong controlled performance, while still leaving room for larger and more production-oriented evaluation.
+
+%% =========================================================
+%% CHAPTER 6 — CONCLUSION AND FUTURE WORK
+%% =========================================================
+\chapter{CONCLUSION AND FUTURE WORK}
+
+\section{Conclusion}
+
+This project has proposed and implemented a \textit{Secure Cloud Deduplication Framework with Behavioural Monitoring} that addresses the critical security gaps present in conventional deduplication systems and in the REFA base paper~\cite{wu2024refa}.
+The framework integrates four tightly coupled modules --- Interface, Core Deduplication, Security and Control, and Behaviour Detection --- into a coherent, deployable system in Python~3.12 with 46 passing tests.
+Viewed as a whole, the work argues that secure cloud deduplication should be evaluated not only by storage efficiency, but also by how effectively it couples cryptographic protection, adaptive ownership verification, and runtime abuse monitoring.
+
+Five key contributions are made.
+First, a chunk-level deduplication engine using HMAC-SHA256 secret-assisted token generation and HKDF-AES-256-GCM per-chunk encryption has been implemented and evaluated, eliminating the external key server dependency of REFA and achieving SRR of $65$--$80\%$ with $O(1)$ lookup at 50\,000 chunks per second.
+Second, the OPRF backend was upgraded from an HMAC simulation to a real Ristretto255 blind-evaluate-unblind construction, aligning the key derivation path with DupLESS-style cryptographic assumptions under the CDH assumption.
+Third, a supervised Random Forest detection module evaluated on a 2200-window simulated stress-test dataset achieves PR-AUC of $0.9686$, $F_1$ of $0.8990$, and Multiclass Macro-$F_1$ of $0.8924$ across four behavioural classes.
+Fourth, a cold-start One-Class SVM operating point achieves PR-AUC of $0.9191$ and $F_1$ of $0.8134$, making it suitable as an early warning detector before higher-precision supervised artefacts are available.
+Fifth, under a fixed-budget solver model, Adaptive PoW reduces estimated attacker success probability from $0.8647$ to $0.4713$ ($45.49\%$ relative reduction), backed by a hybrid Azure trace-anchored behavioural evaluation.
+Taken together, these contributions show that the proposed system is not simply a theoretical modification to prior work, but a thesis-scale prototype in which the major design claims are tied to concrete implementation behaviour, measured storage outcomes, and controlled behavioural evaluation.
+
+\section{Limitations}
+
+Despite the encouraging results, several limitations remain.
+The behavioural evaluation depends on simulated attack windows and trace-aligned synthetic benign data rather than on a large corpus of field-collected adversarial sessions.
+The prototype is also evaluated in a cloud-simulated environment rather than under a large distributed deployment with production traffic diversity, multi-node contention, and long-duration operational drift.
+In addition, the current implementation focuses on a single-server control model and does not explore replicated trust boundaries, distributed key management, or Byzantine fault assumptions.
+
+These limitations do not invalidate the thesis contributions, but they do define their proper scope.
+The current work should therefore be understood as a carefully implemented and evaluated prototype that establishes feasibility, integrates several defence layers, and provides quantitative evidence under controlled conditions.
+It should not yet be interpreted as a production-certified secure storage platform.
+
+\section{Future Work}
+
+Several directions are identified for future research.
+The first concerns evaluation depth: expanding the training dataset with a larger and more diverse set of attack scenarios, particularly for minority-class attacks such as Deduplication DoS, would improve supervised model generalisation and strengthen confidence in deployment beyond controlled stress testing.
+The second concerns collaborative intelligence: investigating federated learning approaches that allow behavioural models to be trained across multiple storage nodes without sharing raw telemetry could improve detection robustness while preserving client privacy.
+The third concerns data semantics: extending the framework to support similarity-based deduplication for near-duplicate content using locality-sensitive hashing would broaden the storage benefits of the system for multimedia and revision-heavy workloads.
+The fourth concerns privacy guarantees: implementing convergent encryption that preserves secure cross-client deduplication without exposing plaintext-derived structure to the server would address an important remaining gap between practical deployability and stronger privacy goals.
+The fifth concerns scale and assurance: conducting larger evaluations on Microsoft Azure Storage Traces and additional public workloads, together with formal verification of the Ristretto255 OPRF protocol and ownership transfer mechanism, would provide stronger evidence for both external validity and provable security.
+The sixth concerns deployment hardening: future iterations could incorporate production-grade observability, automated model refresh workflows, rate-control dashboards, and operator-facing analytics to support real administrative use.
+
+%% =========================================================
+%% REFERENCES — ALPHABETICAL BY FIRST AUTHOR SURNAME
+%% =========================================================
+\chapter*{REFERENCES}
+\addcontentsline{toc}{chapter}{References}
+
+\begin{thebibliography}{99}
+
+\bibitem{gan2025}
+Gan,~C., Li,~Y., Chen,~H., Lu,~X., and Chen,~L.,
+``Coupling Secret Sharing with Decentralised Server-Aided Encryption in Encrypted Deduplication,''
+\textit{Applied Sciences}, vol.~15, no.~3, art.~no.~1245, 2025,
+doi:~10.3390/app15031245.
+
+\bibitem{gao2024}
+Gao,~Y., Chen,~L., Han,~J., Yu,~S., and Fang,~H.,
+``Similarity-Based Secure Deduplication for IIoT Cloud Management System,''
+\textit{IEEE Transactions on Dependable and Secure Computing},
+vol.~21, no.~4, pp.~2242--2256, 2024.
+
+\bibitem{goel2025}
+Goel,~A., and Prabha,~C.,
+``Leveraging Data Deduplication Approaches in the Cloud Storage: A Succinct Review,''
+\textit{Procedia Computer Science}, vol.~259, pp.~1640--1651, 2025.
+
+\bibitem{guan2025}
+Guan,~H., Yu,~L., Zhou,~L., Xiong,~L., Chowdhury,~K., Xie,~L., Xiao,~X., and Zou,~J.,
+``Privacy and Accuracy-Aware AI/ML Model Deduplication,''
+\textit{arXiv}, 2025, doi:~10.48550/arXiv.2503.02862.
+
+\bibitem{ha2023}
+Ha,~G., Jia,~C., Chen,~Y., Chen,~H., and Li,~M.,
+``A Secure Client-Side Deduplication Scheme Based on Updatable Server-Aided Encryption,''
+\textit{IEEE Transactions on Cloud Computing},
+vol.~11, no.~4, pp.~3672--3684, 2023.
+
+\bibitem{hua2025}
+Hua,~Z., Wang,~Z., Song,~M., Zheng,~Y., Xu,~G., and Jia,~X.,
+``Enabling Secure Auditing and Deduplication in Multi-Replica Cloud Storage,''
+\textit{IEEE Transactions on Dependable and Secure Computing},
+vol.~22, no.~6, pp.~6653--6670, 2025.
+
+\bibitem{jiang2023}
+Jiang,~T., Liu,~J., Zhou,~Y., and Fang,~Y.,
+``FuzzyDedup: Secure Fuzzy Deduplication for Cloud Storage,''
+\textit{IEEE Transactions on Dependable and Secure Computing},
+vol.~20, no.~3, pp.~2466--2483, 2023.
+
+\bibitem{lee2023}
+Lee,~M., and Seo,~M.,
+``Secure and Efficient Deduplication for Cloud Storage with Dynamic Ownership Management,''
+\textit{Applied Sciences}, vol.~13, no.~24, art.~no.~13270, 2023.
+
+\bibitem{li2020}
+Li,~J., Yang,~Z., Ren,~Y., Lee,~P.\,P.\,C., and Zhang,~X.,
+``Balancing Storage Efficiency and Data Confidentiality with Tunable Encrypted Deduplication,''
+in \textit{Proc. ACM European Conference on Computer Systems (EuroSys)}, pp.~1--15, 2020.
+
+\bibitem{ma2022}
+Ma,~X., Yang,~W., Zhu,~Y., and Bai,~Z.,
+``A Secure and Efficient Data Deduplication Scheme with Dynamic Ownership Management in Cloud Computing,''
+in \textit{Proc. IEEE Int. Performance, Computing, and Communications Conf.\ (IPCCC)},
+Austin, TX, pp.~194--201, 2022.
+
+\bibitem{peng2025}
+Peng,~X., Shen,~W., Yang,~Y., and Zhang,~X.,
+``Secure Deduplication and Cloud Storage Auditing With Efficient Dynamic Ownership Management and Data Dynamics,''
+\textit{IEEE Transactions on Network and Service Management},
+vol.~22, no.~4, pp.~3463--3479, 2025.
+
+\bibitem{prajapati2022}
+Prajapati,~P., and Shah,~P.,
+``A Review on Secure Data Deduplication: Cloud Storage Security Issue,''
+\textit{Journal of King Saud University -- Computer and Information Sciences},
+vol.~34, no.~7, pp.~3996--4007, 2022.
+
+\bibitem{song2024}
+Song,~M., Hua,~Z., Zheng,~Y., Huang,~H., and Jia,~X.,
+``LSDedup: Layered Secure Deduplication for Cloud Storage,''
+\textit{IEEE Transactions on Computers}, vol.~73, no.~2, pp.~422--435, 2024.
+
+\bibitem{tang2024}
+Tang,~X., Guo,~C., Choo,~K.\mbox{-}K.\,R., Jiang,~X., and Liu,~Y.,
+``A Secure and Lightweight Cloud Data Deduplication Scheme with Efficient Access Control and Key Management,''
+\textit{Computer Communications}, vol.~222, pp.~209--219, 2024,
+doi:~10.1016/j.comcom.2024.05.003.
+
+\bibitem{tarun2025}
+Tarun, Goel,~S., and Jadala,~C.,
+``ADD-QIA: An Adaptive Data Deduplication Framework Based on Quantum Immune Algorithm,''
+\textit{ResearchGate}, 2025, doi:~10.21203/rs.3.rs-7829113/v1.
+
+\bibitem{wu2023lightweight}
+Wu,~X., Wang,~H., Yuan,~Y., and Li,~F.,
+``A Lightweight Encrypted Deduplication Scheme Supporting Backup,''
+\textit{Journal of Systems Architecture}, vol.~138, art.~no.~102858, 2023.
+
+\bibitem{wu2024refa}
+Wu,~X., Li,~J., Wang,~H., Liu,~X., Wu,~W., and Li,~F.,
+``A Randomized Encryption Deduplication Method Against Frequency Attack,''
+\textit{Journal of Information Security and Applications},
+vol.~83, art.~no.~103774, 2024, doi:~10.1016/j.jisa.2024.103774.
+
+\bibitem{zhang2023}
+Zhang,~B., Cui,~H., Liu,~X., Chen,~Y., Yu,~Z., and Guo,~B.,
+``Decentralized and Secure Deduplication with Dynamic Ownership in MLaaS,''
+\textit{Journal of Information Security and Applications},
+vol.~76, art.~no.~103524, 2023.
+
+\bibitem{zheng2025}
+Zheng,~X., Shen,~W., Su,~Y., and Gao,~Y.,
+``DIADD: Secure Deduplication and Efficient Data Integrity Auditing With Data Dynamics for Cloud Storage,''
+\textit{IEEE Transactions on Network and Service Management},
+vol.~22, no.~1, pp.~299--316, 2025.
+
+\end{thebibliography}
+
+\end{document}
+%% =========================================================
+%% END OF DOCUMENT
+%% =========================================================
